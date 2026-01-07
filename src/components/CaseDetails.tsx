@@ -15,6 +15,10 @@ interface CaseDetailsProps {
 }
 
 export default function CaseDetails({ container, selectedFolder }: CaseDetailsProps) {
+  if (!container) {
+    return null;
+  }
+
   const lastUpdated = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
