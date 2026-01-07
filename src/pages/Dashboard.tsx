@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
-import CaseCard from "@/components/CaseCard";
+import CaseAccordion from "@/components/CaseAccordion";
 import CaseDetails from "@/components/CaseDetails";
-import { LegalCase } from "@/types/legal";
-import { mockCases } from "@/data/mockData";
-import { Plus, Briefcase } from "lucide-react";
+import { useContainers } from "@/hooks/useContainers";
+import { SharePointContainer } from "@/services/sharepoint";
+import { FolderNode } from "@/hooks/useFolders";
+import { Plus, Briefcase, Loader2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,8 +24,9 @@ import { Label } from "@/components/ui/label";
 export default function Dashboard() {
   const { isAuthenticated, isInitialized } = useAuth();
   const navigate = useNavigate();
-  const [cases, setCases] = useState<LegalCase[]>(mockCases);
-  const [selectedCase, setSelectedCase] = useState<LegalCase | null>(null);
+  const { containers, isLoading, error, refresh } = useContainers();
+  const [selectedContainer, setSelectedContainer] = useState<SharePointContainer | null>(null);
+  const [selectedFolder, setSelectedFolder] = useState<FolderNode | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newCaseName, setNewCaseName] = useState("");
 
@@ -35,30 +37,23 @@ export default function Dashboard() {
   }, [isInitialized, isAuthenticated, navigate]);
 
   useEffect(() => {
-    // Select first case by default
-    if (cases.length > 0 && !selectedCase) {
-      setSelectedCase(cases[0]);
+    // Select first container by default
+    if (containers.length > 0 && !selectedContainer) {
+      setSelectedContainer(containers[0]);
     }
-  }, [cases, selectedCase]);
+  }, [containers, selectedContainer]);
 
   const handleCreateCase = () => {
     if (!newCaseName.trim()) return;
-
-    const newCase: LegalCase = {
-      id: `case-${Date.now()}`,
-      name: newCaseName.trim(),
-      createdDate: new Date(),
-      modifiedDate: new Date(),
-      status: "active",
-      folderCount: 0,
-      documentCount: 0,
-      containerId: `container-${Date.now()}`,
-    };
-
-    setCases([newCase, ...cases]);
-    setSelectedCase(newCase);
+    // TODO: Implement container creation via Graph API
+    console.log("Create case:", newCaseName);
     setNewCaseName("");
     setIsCreateDialogOpen(false);
+    refresh();
+  };
+
+  const handleFolderSelect = (folder: FolderNode) => {
+    setSelectedFolder(folder);
   };
 
   if (!isInitialized) {
@@ -115,27 +110,41 @@ export default function Dashboard() {
                 </DialogContent>
               </Dialog>
             </div>
-            {selectedCase && (
+            {selectedContainer && (
               <p className="text-sm text-muted-foreground truncate">
-                Selected: {selectedCase.name}
+                Selected: {selectedContainer.displayName}
               </p>
             )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {cases.length === 0 ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-12">
+                <AlertCircle className="w-12 h-12 mx-auto text-destructive/50 mb-3" />
+                <p className="text-destructive">{error}</p>
+                <Button variant="outline" size="sm" onClick={refresh} className="mt-3">
+                  Retry
+                </Button>
+              </div>
+            ) : containers.length === 0 ? (
               <div className="text-center py-12">
                 <Briefcase className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
                 <p className="text-muted-foreground">No cases found</p>
                 <p className="text-sm text-muted-foreground/70">Create a new case to get started</p>
               </div>
             ) : (
-              cases.map((legalCase) => (
-                <CaseCard
-                  key={legalCase.id}
-                  legalCase={legalCase}
-                  isSelected={selectedCase?.id === legalCase.id}
-                  onClick={() => setSelectedCase(legalCase)}
+              containers.map((container) => (
+                <CaseAccordion
+                  key={container.id}
+                  container={container}
+                  isSelected={selectedContainer?.id === container.id}
+                  onSelect={() => setSelectedContainer(container)}
+                  onFolderSelect={handleFolderSelect}
+                  selectedFolderId={selectedFolder?.id}
                 />
               ))
             )}
@@ -144,8 +153,8 @@ export default function Dashboard() {
 
         {/* Main Content */}
         <main className="flex-1 overflow-hidden">
-          {selectedCase ? (
-            <CaseDetails legalCase={selectedCase} />
+          {selectedContainer ? (
+            <CaseDetails container={selectedContainer} selectedFolder={selectedFolder} />
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
