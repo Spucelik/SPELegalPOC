@@ -249,3 +249,93 @@ export async function getFilePreviewUrl(
   }
   return null;
 }
+
+// Get drive ID for a container
+export async function getDriveId(
+  accessToken: string,
+  containerId: string
+): Promise<string> {
+  const driveUrl = `${GRAPH_ENDPOINT}/storage/fileStorage/containers/${containerId}/drive`;
+  
+  const driveResponse = await fetch(driveUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!driveResponse.ok) {
+    throw new Error(`Failed to fetch drive: ${driveResponse.status}`);
+  }
+
+  const driveData = await driveResponse.json();
+  return driveData.id;
+}
+
+// Create a new folder in a container
+export async function createFolder(
+  accessToken: string,
+  containerId: string,
+  parentFolderId: string | null,
+  folderName: string
+): Promise<SharePointFolder> {
+  const driveId = await getDriveId(accessToken, containerId);
+  
+  // Use root or specific folder as parent
+  const createUrl = parentFolderId
+    ? `${GRAPH_ENDPOINT}/drives/${driveId}/items/${parentFolderId}/children`
+    : `${GRAPH_ENDPOINT}/drives/${driveId}/root/children`;
+  
+  const response = await fetch(createUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: folderName,
+      folder: {},
+      "@microsoft.graph.conflictBehavior": "rename"
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Failed to create folder:", error);
+    throw new Error(`Failed to create folder: ${response.status}`);
+  }
+
+  return await response.json();
+}
+
+// Create a new empty Office file
+export async function createEmptyFile(
+  accessToken: string,
+  containerId: string,
+  parentFolderId: string | null,
+  fileName: string
+): Promise<SharePointFile> {
+  const driveId = await getDriveId(accessToken, containerId);
+  
+  // Use root or specific folder as parent
+  const createUrl = parentFolderId
+    ? `${GRAPH_ENDPOINT}/drives/${driveId}/items/${parentFolderId}:/${fileName}:/content`
+    : `${GRAPH_ENDPOINT}/drives/${driveId}/root:/${fileName}:/content`;
+  
+  const response = await fetch(createUrl, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/octet-stream",
+    },
+    body: new Blob([]),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Failed to create file:", error);
+    throw new Error(`Failed to create file: ${response.status}`);
+  }
+
+  return await response.json();
+}

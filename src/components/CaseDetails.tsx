@@ -1,16 +1,29 @@
 import { useEffect, useState, useCallback } from "react";
-import { SharePointContainer } from "@/services/sharepoint";
+import { SharePointContainer, createFolder, createEmptyFile } from "@/services/sharepoint";
 import { FolderNode } from "@/hooks/useFolders";
 import { useFiles } from "@/hooks/useFiles";
+import { useAuth } from "@/contexts/AuthContext";
 import { 
   Folder, 
   Home, 
   Upload, 
   ChevronRight,
-  FileText
+  ChevronDown,
+  FolderPlus,
+  FilePlus,
+  Plus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import FileGrid from "@/components/FileGrid";
+import NewFolderDialog from "@/components/NewFolderDialog";
+import NewDocumentDialog from "@/components/NewDocumentDialog";
+import { toast } from "sonner";
 
 interface BreadcrumbItem {
   id: string | null;
@@ -23,9 +36,13 @@ interface CaseDetailsProps {
 }
 
 export default function CaseDetails({ container, selectedFolder }: CaseDetailsProps) {
+  const { getAccessToken } = useAuth();
   const { files, isLoading, loadFolderContents } = useFiles(container?.id || null);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
+  const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
+  const [isNewDocumentDialogOpen, setIsNewDocumentDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
 
   // Reset when selected folder changes from sidebar
   useEffect(() => {
@@ -62,6 +79,72 @@ export default function CaseDetails({ container, selectedFolder }: CaseDetailsPr
     }
   }, [selectedFolder]);
 
+  const handleCreateFolder = useCallback(async (folderName: string) => {
+    if (!container?.id) return;
+    
+    setIsCreating(true);
+    try {
+      const accessToken = await getAccessToken(["FileStorageContainer.Selected"]);
+      if (!accessToken) {
+        toast.error("Failed to get access token");
+        return;
+      }
+
+      const newFolder = await createFolder(
+        accessToken,
+        container.id,
+        currentFolderId,
+        folderName
+      );
+
+      toast.success(`Folder "${folderName}" created successfully`);
+      setIsNewFolderDialogOpen(false);
+      
+      // Navigate to the newly created folder
+      setCurrentFolderId(newFolder.id);
+      setBreadcrumbs(prev => [...prev, { id: newFolder.id, name: newFolder.name }]);
+    } catch (error) {
+      console.error("Failed to create folder:", error);
+      toast.error("Failed to create folder");
+    } finally {
+      setIsCreating(false);
+    }
+  }, [container?.id, currentFolderId, getAccessToken]);
+
+  const handleCreateFile = useCallback(async (fileName: string, extension: string) => {
+    if (!container?.id) return;
+    
+    setIsCreating(true);
+    try {
+      const accessToken = await getAccessToken(["FileStorageContainer.Selected"]);
+      if (!accessToken) {
+        toast.error("Failed to get access token");
+        return;
+      }
+
+      const fullFileName = `${fileName}.${extension}`;
+      await createEmptyFile(
+        accessToken,
+        container.id,
+        currentFolderId,
+        fullFileName
+      );
+
+      toast.success(`File "${fullFileName}" created successfully`);
+      setIsNewDocumentDialogOpen(false);
+      
+      // Refresh the folder contents to show the new file
+      if (currentFolderId) {
+        loadFolderContents(currentFolderId);
+      }
+    } catch (error) {
+      console.error("Failed to create file:", error);
+      toast.error("Failed to create file");
+    } finally {
+      setIsCreating(false);
+    }
+  }, [container?.id, currentFolderId, getAccessToken, loadFolderContents]);
+
   if (!container) {
     return null;
   }
@@ -94,10 +177,27 @@ export default function CaseDetails({ container, selectedFolder }: CaseDetailsPr
             <Home className="w-4 h-4 mr-1.5" />
             Home
           </Button>
-          <Button size="sm" className="h-8 bg-primary">
-            <FileText className="w-4 h-4 mr-1.5" />
-            New
-          </Button>
+          
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" className="h-8 bg-primary">
+                <Plus className="w-4 h-4 mr-1.5" />
+                New
+                <ChevronDown className="w-4 h-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onClick={() => setIsNewFolderDialogOpen(true)}>
+                <FolderPlus className="w-4 h-4 mr-2" />
+                New Folder
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsNewDocumentDialogOpen(true)}>
+                <FilePlus className="w-4 h-4 mr-2" />
+                New Document
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
           <Button variant="outline" size="sm" className="h-8">
             <Upload className="w-4 h-4 mr-1.5" />
             Upload
@@ -145,6 +245,21 @@ export default function CaseDetails({ container, selectedFolder }: CaseDetailsPr
           </div>
         </div>
       )}
+
+      {/* Dialogs */}
+      <NewFolderDialog
+        isOpen={isNewFolderDialogOpen}
+        onClose={() => setIsNewFolderDialogOpen(false)}
+        onCreateFolder={handleCreateFolder}
+        isCreating={isCreating}
+      />
+
+      <NewDocumentDialog
+        isOpen={isNewDocumentDialogOpen}
+        onClose={() => setIsNewDocumentDialogOpen(false)}
+        onCreateFile={handleCreateFile}
+        isCreating={isCreating}
+      />
     </div>
   );
 }
