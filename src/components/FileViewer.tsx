@@ -1,5 +1,5 @@
-import { SharePointFile } from "@/services/sharepoint";
-import { X, Maximize2, Minimize2, ExternalLink, Download } from "lucide-react";
+import { SharePointFile, getFilePreviewUrl } from "@/services/sharepoint";
+import { X, Maximize2, Minimize2, ExternalLink, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -7,8 +7,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface FileViewerProps {
   file: SharePointFile | null;
@@ -16,29 +17,45 @@ interface FileViewerProps {
   onClose: () => void;
 }
 
-function getDirectDownloadUrl(file: SharePointFile): string | null {
-  // Use the @microsoft.graph.downloadUrl for direct access (bypasses iframe restrictions)
-  return file["@microsoft.graph.downloadUrl"] || null;
-}
-
-function isImageFile(file: SharePointFile): boolean {
-  const mimeType = file.file?.mimeType || "";
-  const name = file.name.toLowerCase();
-  return mimeType.includes("image") || !!name.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/);
-}
-
-function isPdfFile(file: SharePointFile): boolean {
-  const mimeType = file.file?.mimeType || "";
-  const name = file.name.toLowerCase();
-  return mimeType.includes("pdf") || name.endsWith(".pdf");
-}
-
 export default function FileViewer({ file, isOpen, onClose }: FileViewerProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const { getAccessToken } = useAuth();
+
+  useEffect(() => {
+    async function fetchPreviewUrl() {
+      if (!file || !isOpen) {
+        setPreviewUrl(null);
+        return;
+      }
+
+      const driveId = file.parentReference?.driveId;
+      if (!driveId) {
+        console.error("No driveId available for file");
+        setPreviewUrl(null);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const token = await getAccessToken(["Files.Read.All"]);
+        if (token) {
+          const url = await getFilePreviewUrl(token, driveId, file.id);
+          setPreviewUrl(url);
+        }
+      } catch (error) {
+        console.error("Failed to get preview URL:", error);
+        setPreviewUrl(null);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchPreviewUrl();
+  }, [file, isOpen, getAccessToken]);
 
   if (!file) return null;
-
-  const downloadUrl = getDirectDownloadUrl(file);
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -55,17 +72,6 @@ export default function FileViewer({ file, isOpen, onClose }: FileViewerProps) {
               {file.name}
             </SheetTitle>
             <div className="flex items-center gap-1">
-              {downloadUrl && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => window.open(downloadUrl, "_blank")}
-                  title="Download"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -100,45 +106,28 @@ export default function FileViewer({ file, isOpen, onClose }: FileViewerProps) {
         </SheetHeader>
         
         <div className="flex-1 overflow-hidden bg-muted/30">
-          {downloadUrl && isImageFile(file) ? (
-            <div className="w-full h-full flex items-center justify-center p-4">
-              <img
-                src={downloadUrl}
-                alt={file.name}
-                className="max-w-full max-h-full object-contain rounded"
-              />
+          {isLoading ? (
+            <div className="w-full h-full flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             </div>
-          ) : downloadUrl && isPdfFile(file) ? (
+          ) : previewUrl ? (
             <iframe
-              src={downloadUrl}
+              src={previewUrl}
               className="w-full h-full border-0"
               title={file.name}
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center">
               <p className="text-muted-foreground mb-4">
-                {downloadUrl 
-                  ? "Preview not available for this file type."
-                  : "Direct preview not available. Use the buttons above to view or download."}
+                Preview not available for this file type.
               </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => window.open(file.webUrl, "_blank")}
-                >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  Open in SharePoint
-                </Button>
-                {downloadUrl && (
-                  <Button
-                    variant="outline"
-                    onClick={() => window.open(downloadUrl, "_blank")}
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                  </Button>
-                )}
-              </div>
+              <Button
+                variant="outline"
+                onClick={() => window.open(file.webUrl, "_blank")}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in SharePoint
+              </Button>
             </div>
           )}
         </div>
