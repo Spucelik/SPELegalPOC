@@ -137,3 +137,80 @@ export async function fetchChildFolders(
   const data: DriveItemsResponse = await response.json();
   return data.value || [];
 }
+
+// File item interface for folder contents
+export interface SharePointFile {
+  id: string;
+  name: string;
+  createdDateTime: string;
+  lastModifiedDateTime: string;
+  size?: number;
+  webUrl: string;
+  createdBy?: {
+    user?: {
+      displayName?: string;
+      email?: string;
+    };
+  };
+  lastModifiedBy?: {
+    user?: {
+      displayName?: string;
+      email?: string;
+    };
+  };
+  file?: {
+    mimeType: string;
+  };
+  folder?: {
+    childCount: number;
+  };
+}
+
+interface FolderContentsResponse {
+  value: SharePointFile[];
+}
+
+// Fetch all items (files and folders) in a folder
+export async function fetchFolderContents(
+  accessToken: string,
+  containerId: string,
+  folderId: string | null
+): Promise<SharePointFile[]> {
+  // First get the drive ID for this container
+  const driveUrl = `${GRAPH_ENDPOINT}/storage/fileStorage/containers/${containerId}/drive`;
+  
+  const driveResponse = await fetch(driveUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!driveResponse.ok) {
+    throw new Error(`Failed to fetch drive: ${driveResponse.status}`);
+  }
+
+  const driveData = await driveResponse.json();
+  const driveId = driveData.id;
+
+  // If no folderId, get root children; otherwise get specific folder children
+  const contentsUrl = folderId
+    ? `${GRAPH_ENDPOINT}/drives/${driveId}/items/${folderId}/children`
+    : `${GRAPH_ENDPOINT}/drives/${driveId}/root/children`;
+  
+  const response = await fetch(contentsUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Failed to fetch folder contents:", error);
+    throw new Error(`Failed to fetch folder contents: ${response.status}`);
+  }
+
+  const data: FolderContentsResponse = await response.json();
+  return data.value || [];
+}
