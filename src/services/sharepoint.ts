@@ -146,6 +146,7 @@ export interface SharePointFile {
   lastModifiedDateTime: string;
   size?: number;
   webUrl: string;
+  "@microsoft.graph.downloadUrl"?: string;
   createdBy?: {
     user?: {
       displayName?: string;
@@ -163,6 +164,9 @@ export interface SharePointFile {
   };
   folder?: {
     childCount: number;
+  };
+  parentReference?: {
+    driveId?: string;
   };
 }
 
