@@ -1,5 +1,5 @@
 import { SharePointFile } from "@/services/sharepoint";
-import { X, Maximize2, Minimize2 } from "lucide-react";
+import { X, Maximize2, Minimize2, ExternalLink, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -16,28 +16,9 @@ interface FileViewerProps {
   onClose: () => void;
 }
 
-function getPreviewUrl(file: SharePointFile): string | null {
-  // Use the webUrl for embedding - for SharePoint files this should work
-  // For PDFs and images, we can embed directly
-  const mimeType = file.file?.mimeType || "";
-  const name = file.name.toLowerCase();
-  
-  if (mimeType.includes("pdf") || name.endsWith(".pdf")) {
-    // For PDFs, use the webUrl with embed parameter
-    return file.webUrl;
-  }
-  
-  if (mimeType.includes("image") || name.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
-    return file.webUrl;
-  }
-  
-  // For text files
-  if (mimeType.includes("text") || name.match(/\.(txt|csv|json|xml|html|css|js|ts)$/)) {
-    return file.webUrl;
-  }
-  
-  // Default to webUrl
-  return file.webUrl;
+function getDirectDownloadUrl(file: SharePointFile): string | null {
+  // Use the @microsoft.graph.downloadUrl for direct access (bypasses iframe restrictions)
+  return file["@microsoft.graph.downloadUrl"] || null;
 }
 
 function isImageFile(file: SharePointFile): boolean {
@@ -57,7 +38,7 @@ export default function FileViewer({ file, isOpen, onClose }: FileViewerProps) {
 
   if (!file) return null;
 
-  const previewUrl = getPreviewUrl(file);
+  const downloadUrl = getDirectDownloadUrl(file);
 
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -74,6 +55,26 @@ export default function FileViewer({ file, isOpen, onClose }: FileViewerProps) {
               {file.name}
             </SheetTitle>
             <div className="flex items-center gap-1">
+              {downloadUrl && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => window.open(downloadUrl, "_blank")}
+                  title="Download"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => window.open(file.webUrl, "_blank")}
+                title="Open in SharePoint"
+              >
+                <ExternalLink className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -99,31 +100,45 @@ export default function FileViewer({ file, isOpen, onClose }: FileViewerProps) {
         </SheetHeader>
         
         <div className="flex-1 overflow-hidden bg-muted/30">
-          {isImageFile(file) ? (
+          {downloadUrl && isImageFile(file) ? (
             <div className="w-full h-full flex items-center justify-center p-4">
               <img
-                src={previewUrl || ""}
+                src={downloadUrl}
                 alt={file.name}
                 className="max-w-full max-h-full object-contain rounded"
               />
             </div>
-          ) : isPdfFile(file) ? (
+          ) : downloadUrl && isPdfFile(file) ? (
             <iframe
-              src={`${previewUrl}?action=embedview`}
+              src={downloadUrl}
               className="w-full h-full border-0"
               title={file.name}
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center">
               <p className="text-muted-foreground mb-4">
-                Preview not available for this file type.
+                {downloadUrl 
+                  ? "Preview not available for this file type."
+                  : "Direct preview not available. Use the buttons above to view or download."}
               </p>
-              <Button
-                variant="outline"
-                onClick={() => window.open(file.webUrl, "_blank")}
-              >
-                Open in Browser
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => window.open(file.webUrl, "_blank")}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open in SharePoint
+                </Button>
+                {downloadUrl && (
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(downloadUrl, "_blank")}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download
+                  </Button>
+                )}
+              </div>
             </div>
           )}
         </div>
