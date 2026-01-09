@@ -22,40 +22,12 @@ export interface SharePointFolder {
   };
 }
 
-export interface SharePointFile {
-  id: string;
-  name: string;
-  createdDateTime: string;
-  lastModifiedDateTime: string;
-  size: number;
-  webUrl: string;
-  file?: {
-    mimeType: string;
-  };
-  createdBy?: {
-    user?: {
-      displayName: string;
-      email: string;
-    };
-  };
-  lastModifiedBy?: {
-    user?: {
-      displayName: string;
-      email: string;
-    };
-  };
-}
-
 interface ContainersResponse {
   value: SharePointContainer[];
 }
 
 interface DriveItemsResponse {
   value: SharePointFolder[];
-}
-
-interface FilesResponse {
-  value: SharePointFile[];
 }
 
 // Fetch all containers for the configured container type
@@ -164,51 +136,4 @@ export async function fetchChildFolders(
 
   const data: DriveItemsResponse = await response.json();
   return data.value || [];
-}
-
-// Fetch files for a specific folder (excludes folders)
-export async function fetchFolderFiles(
-  accessToken: string,
-  containerId: string,
-  folderId: string | null
-): Promise<SharePointFile[]> {
-  // First get the drive ID for this container
-  const driveUrl = `${GRAPH_ENDPOINT}/storage/fileStorage/containers/${containerId}/drive`;
-  
-  const driveResponse = await fetch(driveUrl, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!driveResponse.ok) {
-    throw new Error(`Failed to fetch drive: ${driveResponse.status}`);
-  }
-
-  const driveData = await driveResponse.json();
-  const driveId = driveData.id;
-
-  // Fetch children - if folderId is null, fetch from root, otherwise from specific folder
-  // Note: $filter is not supported on children endpoint, so we filter client-side
-  const filesUrl = folderId 
-    ? `${GRAPH_ENDPOINT}/drives/${driveId}/items/${folderId}/children`
-    : `${GRAPH_ENDPOINT}/drives/${driveId}/root/children`;
-  
-  const response = await fetch(filesUrl, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error("Failed to fetch folder files:", error);
-    throw new Error(`Failed to fetch folder files: ${response.status}`);
-  }
-
-  const data: FilesResponse = await response.json();
-  // Filter to only include files (items with file property), exclude folders
-  return (data.value || []).filter(item => item.file);
 }
