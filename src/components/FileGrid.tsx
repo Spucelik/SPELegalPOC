@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { SharePointFile } from "@/services/sharepoint";
 import { 
   Folder, 
@@ -16,12 +17,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
+import FileViewer from "@/components/FileViewer";
 
 interface FileGridProps {
   files: SharePointFile[];
   isLoading: boolean;
   folderName: string;
+  onFolderClick?: (folderId: string, folderName: string) => void;
 }
 
 function getFileIcon(file: SharePointFile) {
@@ -75,7 +77,48 @@ function formatSize(bytes?: number, isFolder?: boolean, childCount?: number): st
   return `${size.toFixed(unitIndex > 0 ? 2 : 0)} ${units[unitIndex]}`;
 }
 
-export default function FileGrid({ files, isLoading, folderName }: FileGridProps) {
+function isOfficeFile(file: SharePointFile): boolean {
+  const mimeType = file.file?.mimeType || "";
+  const name = file.name.toLowerCase();
+  
+  // Check for Office file types
+  const officeExtensions = [".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".one", ".vsdx"];
+  const officeMimeTypes = ["word", "excel", "powerpoint", "onenote", "visio", "officedocument"];
+  
+  if (officeExtensions.some(ext => name.endsWith(ext))) {
+    return true;
+  }
+  
+  if (officeMimeTypes.some(type => mimeType.includes(type))) {
+    return true;
+  }
+  
+  return false;
+}
+
+export default function FileGrid({ files, isLoading, folderName, onFolderClick }: FileGridProps) {
+  const [viewerFile, setViewerFile] = useState<SharePointFile | null>(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+
+  const handleItemClick = (file: SharePointFile) => {
+    if (file.folder) {
+      // Navigate into folder
+      onFolderClick?.(file.id, file.name);
+    } else if (isOfficeFile(file)) {
+      // Open Office files in new tab
+      window.open(file.webUrl, "_blank");
+    } else {
+      // Open file viewer for non-Office files
+      setViewerFile(file);
+      setIsViewerOpen(true);
+    }
+  };
+
+  const handleCloseViewer = () => {
+    setIsViewerOpen(false);
+    setViewerFile(null);
+  };
+
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -99,59 +142,65 @@ export default function FileGrid({ files, isLoading, folderName }: FileGridProps
   }
 
   return (
-    <div className="flex-1 overflow-auto">
-      {/* Folder indicator */}
-      <div className="px-4 py-2 flex items-center gap-2 text-sm text-muted-foreground">
-        <Folder className="w-4 h-4 text-blue-500" />
-        <span>{folderName}</span>
-      </div>
-      
-      <Table>
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="w-[50%]">Name</TableHead>
-            <TableHead>Modified</TableHead>
-            <TableHead>Created</TableHead>
-            <TableHead>Created By</TableHead>
-            <TableHead className="text-right">Size/Items</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {files.map((file) => (
-            <TableRow key={file.id} className="cursor-pointer">
-              <TableCell>
-                <div className="flex items-center gap-3">
-                  <Checkbox className="opacity-0 group-hover:opacity-100" />
-                  {getFileIcon(file)}
-                  <a 
-                    href={file.webUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="hover:text-primary hover:underline transition-colors"
-                  >
-                    {file.name}
-                  </a>
-                </div>
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatDate(file.lastModifiedDateTime)}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {formatDate(file.createdDateTime)}
-              </TableCell>
-              <TableCell>
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <User className="w-4 h-4" />
-                  <span>{file.createdBy?.user?.displayName || "Unknown"}</span>
-                </div>
-              </TableCell>
-              <TableCell className="text-right text-muted-foreground">
-                {formatSize(file.size, !!file.folder, file.folder?.childCount)}
-              </TableCell>
+    <>
+      <div className="flex-1 overflow-auto">
+        {/* Folder indicator */}
+        <div className="px-4 py-2 flex items-center gap-2 text-sm text-muted-foreground">
+          <Folder className="w-4 h-4 text-blue-500" />
+          <span>{folderName}</span>
+        </div>
+        
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="w-[50%]">Name</TableHead>
+              <TableHead>Modified</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>Created By</TableHead>
+              <TableHead className="text-right">Size/Items</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {files.map((file) => (
+              <TableRow 
+                key={file.id} 
+                className="cursor-pointer"
+                onClick={() => handleItemClick(file)}
+              >
+                <TableCell>
+                  <div className="flex items-center gap-3">
+                    {getFileIcon(file)}
+                    <span className="hover:text-primary hover:underline transition-colors">
+                      {file.name}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(file.lastModifiedDateTime)}
+                </TableCell>
+                <TableCell className="text-muted-foreground">
+                  {formatDate(file.createdDateTime)}
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <User className="w-4 h-4" />
+                    <span>{file.createdBy?.user?.displayName || "Unknown"}</span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {formatSize(file.size, !!file.folder, file.folder?.childCount)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <FileViewer 
+        file={viewerFile} 
+        isOpen={isViewerOpen} 
+        onClose={handleCloseViewer} 
+      />
+    </>
   );
 }
