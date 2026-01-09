@@ -190,9 +190,10 @@ export async function fetchFolderFiles(
   const driveId = driveData.id;
 
   // Fetch children - if folderId is null, fetch from root, otherwise from specific folder
+  // Note: $filter is not supported on children endpoint, so we filter client-side
   const filesUrl = folderId 
-    ? `${GRAPH_ENDPOINT}/drives/${driveId}/items/${folderId}/children?$filter=file ne null`
-    : `${GRAPH_ENDPOINT}/drives/${driveId}/root/children?$filter=file ne null`;
+    ? `${GRAPH_ENDPOINT}/drives/${driveId}/items/${folderId}/children`
+    : `${GRAPH_ENDPOINT}/drives/${driveId}/root/children`;
   
   const response = await fetch(filesUrl, {
     headers: {
@@ -208,5 +209,6 @@ export async function fetchFolderFiles(
   }
 
   const data: FilesResponse = await response.json();
-  return data.value || [];
+  // Filter to only include files (items with file property), exclude folders
+  return (data.value || []).filter(item => item.file);
 }
