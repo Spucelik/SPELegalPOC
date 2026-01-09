@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { SharePointContainer } from "@/services/sharepoint";
 import { FolderNode } from "@/hooks/useFolders";
+import { useFiles } from "@/hooks/useFiles";
+import FileGrid from "@/components/FileGrid";
 import { 
   Folder, 
   Home, 
@@ -15,6 +18,14 @@ interface CaseDetailsProps {
 }
 
 export default function CaseDetails({ container, selectedFolder }: CaseDetailsProps) {
+  const { files, isLoading, error, loadFiles } = useFiles(container?.id || null);
+
+  useEffect(() => {
+    if (container && selectedFolder) {
+      loadFiles(selectedFolder.id);
+    }
+  }, [container?.id, selectedFolder?.id, loadFiles]);
+
   if (!container) {
     return null;
   }
@@ -66,13 +77,22 @@ export default function CaseDetails({ container, selectedFolder }: CaseDetailsPr
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 overflow-auto flex items-center justify-center">
-        <div className="text-center text-muted-foreground">
-          <Folder className="w-16 h-16 mx-auto mb-4 opacity-30" />
-          <p className="text-lg">Select a folder to view contents</p>
-          <p className="text-sm mt-1">Files are not displayed in this view</p>
+      {selectedFolder ? (
+        <FileGrid 
+          files={files} 
+          isLoading={isLoading} 
+          error={error} 
+          folderName={folderName} 
+        />
+      ) : (
+        <div className="flex-1 overflow-auto flex items-center justify-center">
+          <div className="text-center text-muted-foreground">
+            <Folder className="w-16 h-16 mx-auto mb-4 opacity-30" />
+            <p className="text-lg">Select a folder to view contents</p>
+            <p className="text-sm mt-1">Click on a folder in the sidebar</p>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
