@@ -218,3 +218,34 @@ export async function fetchFolderContents(
   const data: FolderContentsResponse = await response.json();
   return data.value || [];
 }
+
+// Get preview URL for a file (embeddable in iframe)
+export async function getFilePreviewUrl(
+  accessToken: string,
+  driveId: string,
+  itemId: string
+): Promise<string | null> {
+  const previewUrl = `${GRAPH_ENDPOINT}/drives/${driveId}/items/${itemId}/preview`;
+  
+  const response = await fetch(previewUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    console.error("Failed to get preview URL:", await response.text());
+    return null;
+  }
+
+  const data = await response.json();
+  // Add nb=true to remove the banner
+  const getUrl = data.getUrl;
+  if (getUrl) {
+    return getUrl.includes("?") ? `${getUrl}&nb=true` : `${getUrl}?nb=true`;
+  }
+  return null;
+}
