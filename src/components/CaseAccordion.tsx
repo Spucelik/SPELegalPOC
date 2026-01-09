@@ -11,6 +11,7 @@ interface CaseAccordionProps {
   onSelect: () => void;
   onFolderSelect?: (folder: FolderNode) => void;
   selectedFolderId?: string | null;
+  onRefreshFolders?: (refreshFn: () => void) => void;
 }
 
 export default function CaseAccordion({
@@ -19,6 +20,7 @@ export default function CaseAccordion({
   onSelect,
   onFolderSelect,
   selectedFolderId,
+  onRefreshFolders,
 }: CaseAccordionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { 
@@ -43,6 +45,13 @@ export default function CaseAccordion({
       loadRootFolders();
     }
   }, [isExpanded, rootFolders.length, loadRootFolders]);
+
+  // Expose refresh function to parent when this accordion is selected
+  useEffect(() => {
+    if (isSelected && onRefreshFolders) {
+      onRefreshFolders(loadRootFolders);
+    }
+  }, [isSelected, onRefreshFolders, loadRootFolders]);
 
   const handleToggle = (e: React.MouseEvent) => {
     e.stopPropagation();

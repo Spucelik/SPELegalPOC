@@ -33,9 +33,10 @@ interface BreadcrumbItem {
 interface CaseDetailsProps {
   container: SharePointContainer;
   selectedFolder: FolderNode | null;
+  onFolderCreated?: () => void;
 }
 
-export default function CaseDetails({ container, selectedFolder }: CaseDetailsProps) {
+export default function CaseDetails({ container, selectedFolder, onFolderCreated }: CaseDetailsProps) {
   const { getAccessToken } = useAuth();
   const { files, isLoading, loadFolderContents } = useFiles(container?.id || null);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -103,13 +104,16 @@ export default function CaseDetails({ container, selectedFolder }: CaseDetailsPr
       // Navigate to the newly created folder
       setCurrentFolderId(newFolder.id);
       setBreadcrumbs(prev => [...prev, { id: newFolder.id, name: newFolder.name }]);
+      
+      // Trigger refresh of the sidebar folder tree
+      onFolderCreated?.();
     } catch (error) {
       console.error("Failed to create folder:", error);
       toast.error("Failed to create folder");
     } finally {
       setIsCreating(false);
     }
-  }, [container?.id, currentFolderId, getAccessToken]);
+  }, [container?.id, currentFolderId, getAccessToken, onFolderCreated]);
 
   const handleCreateFile = useCallback(async (fileName: string, extension: string) => {
     if (!container?.id) return;
