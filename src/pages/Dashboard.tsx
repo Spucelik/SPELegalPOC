@@ -29,6 +29,7 @@ export default function Dashboard() {
   const [selectedFolder, setSelectedFolder] = useState<FolderNode | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newCaseName, setNewCaseName] = useState("");
+  const [refreshFoldersFn, setRefreshFoldersFn] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
@@ -54,6 +55,16 @@ export default function Dashboard() {
 
   const handleFolderSelect = (folder: FolderNode) => {
     setSelectedFolder(folder);
+  };
+
+  const handleRefreshFolders = (refreshFn: () => void) => {
+    setRefreshFoldersFn(() => refreshFn);
+  };
+
+  const triggerFolderRefresh = () => {
+    if (refreshFoldersFn) {
+      refreshFoldersFn();
+    }
   };
 
   if (!isInitialized) {
@@ -145,6 +156,7 @@ export default function Dashboard() {
                   onSelect={() => setSelectedContainer(container)}
                   onFolderSelect={handleFolderSelect}
                   selectedFolderId={selectedFolder?.id}
+                  onRefreshFolders={selectedContainer?.id === container.id ? handleRefreshFolders : undefined}
                 />
               ))
             )}
@@ -154,7 +166,11 @@ export default function Dashboard() {
         {/* Main Content */}
         <main className="flex-1 overflow-hidden">
           {selectedContainer ? (
-            <CaseDetails container={selectedContainer} selectedFolder={selectedFolder} />
+            <CaseDetails 
+              container={selectedContainer} 
+              selectedFolder={selectedFolder}
+              onFolderCreated={triggerFolderRefresh}
+            />
           ) : (
             <div className="h-full flex items-center justify-center">
               <div className="text-center">
