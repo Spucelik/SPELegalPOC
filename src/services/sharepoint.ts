@@ -553,6 +553,102 @@ export interface KeyDate {
   date: string;
 }
 
+// Fetch jurisdiction using Microsoft Copilot retrieval API
+export async function fetchJurisdiction(
+  accessToken: string,
+  caseTitle: string
+): Promise<string | null> {
+  const url = "https://graph.microsoft.com/beta/copilot/microsoft.graph.retrieval";
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      queryString: `What is the jurisdiction, court, district, or venue where the case ${caseTitle} was filed?`,
+      dataSource: "sharePointEmbedded",
+      dataSourceConfiguration: {
+        SharePointEmbedded: {
+          ContainerTypeId: SHAREPOINT_CONFIG.CONTAINER_TYPE_ID,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Failed to fetch jurisdiction:", error);
+    return null;
+  }
+
+  const data: CopilotRetrievalResponse = await response.json();
+  
+  if (data.retrievalHits && data.retrievalHits.length > 0) {
+    const firstHit = data.retrievalHits[0];
+    if (firstHit.extracts && firstHit.extracts.length > 0 && firstHit.extracts[0].text) {
+      let text = firstHit.extracts[0].text;
+      // Clean up the text
+      text = text.replace(/<page_\d+>/g, '').replace(/<\/page_\d+>/g, '');
+      text = text.replace(/\\_/g, '_').replace(/\\-/g, '-');
+      text = text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
+      text = text.replace(/\\\(/g, '(').replace(/\\\)/g, ')');
+      text = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      
+      // Try to extract just the court/jurisdiction name
+      return parseJurisdiction(text);
+    }
+  }
+  
+  return null;
+}
+
+// Parse text to extract jurisdiction info
+function parseJurisdiction(text: string): string | null {
+  // Common court patterns
+  const courtPatterns = [
+    /(?:court of appeal[s]?[^,.\n]*)/i,
+    /(?:supreme court[^,.\n]*)/i,
+    /(?:district court[^,.\n]*)/i,
+    /(?:circuit court[^,.\n]*)/i,
+    /(?:superior court[^,.\n]*)/i,
+    /(?:trial court[^,.\n]*)/i,
+    /(?:(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh)\s+(?:judicial\s+)?(?:district|circuit)[^,.\n]*)/i,
+  ];
+  
+  for (const pattern of courtPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      let jurisdiction = match[0].trim();
+      // Clean up and capitalize properly
+      jurisdiction = jurisdiction.replace(/\s+/g, ' ');
+      // Limit length
+      if (jurisdiction.length > 100) {
+        jurisdiction = jurisdiction.substring(0, 100) + '...';
+      }
+      return jurisdiction;
+    }
+  }
+  
+  // If no specific court pattern found, return first sentence if it mentions state/county
+  const statePattern = /(?:state of [a-z]+|[a-z]+ county|parish of [a-z]+)/i;
+  const stateMatch = text.match(statePattern);
+  if (stateMatch) {
+    // Get surrounding context
+    const idx = text.indexOf(stateMatch[0]);
+    const start = Math.max(0, text.lastIndexOf('.', idx) + 1);
+    const end = text.indexOf('.', idx + stateMatch[0].length);
+    let snippet = text.substring(start, end > 0 ? end : undefined).trim();
+    if (snippet.length > 100) {
+      snippet = snippet.substring(0, 100) + '...';
+    }
+    return snippet;
+  }
+  
+  return null;
+}
+
 // Fetch key dates using Microsoft Copilot retrieval API
 export async function fetchKeyDates(
   accessToken: string,

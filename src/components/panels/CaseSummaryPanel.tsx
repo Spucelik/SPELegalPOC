@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Users, Calendar, Clock, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchCaseSummary, fetchKeyDates, KeyDate } from "@/services/sharepoint";
+import { fetchCaseSummary, fetchKeyDates, fetchJurisdiction, KeyDate } from "@/services/sharepoint";
 
 interface CaseSummaryPanelProps {
   containerName?: string;
@@ -20,12 +20,14 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
   const [isExpanded, setIsExpanded] = useState(false);
   const [keyDates, setKeyDates] = useState<KeyDate[]>([]);
   const [isLoadingDates, setIsLoadingDates] = useState(false);
+  const [jurisdiction, setJurisdiction] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
       if (!containerName) {
         setSummary(null);
         setKeyDates([]);
+        setJurisdiction(null);
         return;
       }
 
@@ -40,13 +42,15 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
         ]);
         
         if (token) {
-          // Fetch summary and key dates in parallel
-          const [summaryResult, datesResult] = await Promise.all([
+          // Fetch summary, key dates, and jurisdiction in parallel
+          const [summaryResult, datesResult, jurisdictionResult] = await Promise.all([
             fetchCaseSummary(token, containerName),
-            fetchKeyDates(token, containerName)
+            fetchKeyDates(token, containerName),
+            fetchJurisdiction(token, containerName)
           ]);
           setSummary(summaryResult);
           setKeyDates(datesResult);
+          setJurisdiction(jurisdictionResult);
         }
       } catch (err) {
         console.error("Error loading case data:", err);
@@ -102,6 +106,12 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
             <p className="text-sm text-muted-foreground">Case Name</p>
             <p className="font-medium">{containerName || "No case selected"}</p>
           </div>
+          {jurisdiction && (
+            <div>
+              <p className="text-sm text-muted-foreground">Jurisdiction</p>
+              <p className="font-medium">{jurisdiction}</p>
+            </div>
+          )}
           <div>
             <p className="text-sm text-muted-foreground">Summary</p>
             {isLoading ? (
