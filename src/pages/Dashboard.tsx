@@ -20,6 +20,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import FlyoutPanel from "@/components/FlyoutPanel";
+import FlyoutButtons from "@/components/FlyoutButtons";
+import CaseSummaryPanel from "@/components/panels/CaseSummaryPanel";
+import ToolsPanel from "@/components/panels/ToolsPanel";
+import ReportsPanel from "@/components/panels/ReportsPanel";
+
+type PanelType = "caseSummary" | "tools" | "reports";
 
 export default function Dashboard() {
   const { isAuthenticated, isInitialized } = useAuth();
@@ -30,6 +37,10 @@ export default function Dashboard() {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [newCaseName, setNewCaseName] = useState("");
   const [refreshFoldersFn, setRefreshFoldersFn] = useState<(() => void) | null>(null);
+  
+  // Flyout panel state
+  const [activePanel, setActivePanel] = useState<PanelType | null>(null);
+  const [pinnedPanels, setPinnedPanels] = useState<Set<PanelType>>(new Set());
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
@@ -67,6 +78,34 @@ export default function Dashboard() {
     }
   };
 
+  const handlePanelToggle = (panel: PanelType) => {
+    setActivePanel(activePanel === panel ? null : panel);
+  };
+
+  const handlePinToggle = (panel: PanelType) => {
+    setPinnedPanels(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(panel)) {
+        newSet.delete(panel);
+      } else {
+        newSet.add(panel);
+      }
+      return newSet;
+    });
+  };
+
+  const handlePanelClose = (panel: PanelType) => {
+    setActivePanel(null);
+    setPinnedPanels(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(panel);
+      return newSet;
+    });
+  };
+
+  // Check if any panel is pinned to adjust layout
+  const hasPinnedPanel = activePanel !== null && pinnedPanels.has(activePanel);
+
   if (!isInitialized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -79,7 +118,7 @@ export default function Dashboard() {
     <div className="min-h-screen flex flex-col bg-background">
       <Header />
 
-      <div className="flex-1 flex">
+      <div className="flex-1 flex relative">
         {/* Sidebar - Cases List */}
         <aside className="w-80 border-r border-border bg-card flex flex-col">
           <div className="p-4 border-b border-border">
@@ -163,8 +202,13 @@ export default function Dashboard() {
           </div>
         </aside>
 
-        {/* Main Content */}
-        <main className="flex-1 overflow-hidden">
+        {/* Main Content - adjusts when panel is pinned */}
+        <main 
+          className="flex-1 overflow-hidden transition-all duration-300"
+          style={{ 
+            marginRight: hasPinnedPanel ? '414px' : '56px' // 400px panel + 14px buttons
+          }}
+        >
           {selectedContainer ? (
             <CaseDetails 
               container={selectedContainer} 
@@ -180,6 +224,43 @@ export default function Dashboard() {
             </div>
           )}
         </main>
+
+        {/* Flyout Buttons */}
+        <FlyoutButtons 
+          activePanel={activePanel} 
+          onPanelToggle={handlePanelToggle} 
+        />
+
+        {/* Flyout Panels */}
+        <FlyoutPanel
+          title="Case Summary"
+          isOpen={activePanel === "caseSummary"}
+          onClose={() => handlePanelClose("caseSummary")}
+          isPinned={pinnedPanels.has("caseSummary")}
+          onPinToggle={() => handlePinToggle("caseSummary")}
+        >
+          <CaseSummaryPanel containerName={selectedContainer?.displayName} />
+        </FlyoutPanel>
+
+        <FlyoutPanel
+          title="Tools"
+          isOpen={activePanel === "tools"}
+          onClose={() => handlePanelClose("tools")}
+          isPinned={pinnedPanels.has("tools")}
+          onPinToggle={() => handlePinToggle("tools")}
+        >
+          <ToolsPanel />
+        </FlyoutPanel>
+
+        <FlyoutPanel
+          title="Reports"
+          isOpen={activePanel === "reports"}
+          onClose={() => handlePanelClose("reports")}
+          isPinned={pinnedPanels.has("reports")}
+          onPinToggle={() => handlePinToggle("reports")}
+        >
+          <ReportsPanel />
+        </FlyoutPanel>
       </div>
     </div>
   );
