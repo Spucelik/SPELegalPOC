@@ -486,6 +486,27 @@ async function uploadLargeFile(
 }
 
 // Copilot retrieval response interface
+// Clean up text from Copilot API responses
+function cleanCopilotText(text: string): string {
+  let cleaned = text;
+  // Remove page markers
+  cleaned = cleaned.replace(/<page_\d+>/g, '').replace(/<\/page_\d+>/g, '');
+  // Remove escaped markdown characters
+  cleaned = cleaned.replace(/\\_/g, '_').replace(/\\-/g, '-');
+  cleaned = cleaned.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
+  cleaned = cleaned.replace(/\\\(/g, '(').replace(/\\\)/g, ')');
+  cleaned = cleaned.replace(/\\\*/g, '*');
+  // Remove standalone asterisks used as separators (e.g., "* * * * *" or "\* \* \*")
+  cleaned = cleaned.replace(/(\s*\*\s*){2,}/g, ' ');
+  // Remove single asterisks at word boundaries (markdown bold/italic markers)
+  cleaned = cleaned.replace(/\*+/g, '');
+  // Remove backslashes before common characters
+  cleaned = cleaned.replace(/\\([^\\])/g, '$1');
+  // Clean up whitespace
+  cleaned = cleaned.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  return cleaned;
+}
+
 export interface CopilotRetrievalResponse {
   retrievalHits?: Array<{
     webUrl?: string;
@@ -533,15 +554,7 @@ export async function fetchCaseSummary(
   if (data.retrievalHits && data.retrievalHits.length > 0) {
     const firstHit = data.retrievalHits[0];
     if (firstHit.extracts && firstHit.extracts.length > 0 && firstHit.extracts[0].text) {
-      // Clean up the text by removing page markers and excessive whitespace
-      let text = firstHit.extracts[0].text;
-      text = text.replace(/<page_\d+>/g, '').replace(/<\/page_\d+>/g, '');
-      // Remove escaped markdown characters
-      text = text.replace(/\\_/g, '_').replace(/\\-/g, '-');
-      text = text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
-      text = text.replace(/\\\(/g, '(').replace(/\\\)/g, ')');
-      text = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-      return text;
+      return cleanCopilotText(firstHit.extracts[0].text);
     }
   }
   
@@ -588,15 +601,7 @@ export async function fetchJurisdiction(
   if (data.retrievalHits && data.retrievalHits.length > 0) {
     const firstHit = data.retrievalHits[0];
     if (firstHit.extracts && firstHit.extracts.length > 0 && firstHit.extracts[0].text) {
-      let text = firstHit.extracts[0].text;
-      // Clean up the text
-      text = text.replace(/<page_\d+>/g, '').replace(/<\/page_\d+>/g, '');
-      text = text.replace(/\\_/g, '_').replace(/\\-/g, '-');
-      text = text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
-      text = text.replace(/\\\(/g, '(').replace(/\\\)/g, ')');
-      text = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-      
-      // Try to extract just the court/jurisdiction name
+      const text = cleanCopilotText(firstHit.extracts[0].text);
       return parseJurisdiction(text);
     }
   }
@@ -681,17 +686,10 @@ export async function fetchKeyDates(
 
   const data: CopilotRetrievalResponse = await response.json();
   
-  // Extract dates from the retrieval hits
   if (data.retrievalHits && data.retrievalHits.length > 0) {
     const firstHit = data.retrievalHits[0];
     if (firstHit.extracts && firstHit.extracts.length > 0 && firstHit.extracts[0].text) {
-      let text = firstHit.extracts[0].text;
-      // Clean up the text
-      text = text.replace(/<page_\d+>/g, '').replace(/<\/page_\d+>/g, '');
-      text = text.replace(/\\_/g, '_').replace(/\\-/g, '-');
-      text = text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
-      text = text.replace(/\\\(/g, '(').replace(/\\\)/g, ')');
-      
+      const text = cleanCopilotText(firstHit.extracts[0].text);
       return parseKeyDates(text);
     }
   }
