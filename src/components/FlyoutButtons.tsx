@@ -16,14 +16,14 @@ export default function FlyoutButtons({ activePanel, onPanelToggle }: FlyoutButt
   ];
 
   return (
-    <div className="fixed right-0 top-14 z-50 flex flex-col">
+    <div className="fixed right-0 top-14 z-50 flex flex-col gap-2 pr-0 pt-2">
       {buttons.map((button) => (
         <button
           key={button.id}
           data-flyout-trigger
           onClick={() => onPanelToggle(button.id)}
           className={cn(
-            "group flex items-center gap-2 px-3 py-4 text-primary-foreground font-medium text-sm transition-all duration-200 shadow-lg",
+            "group flex items-center gap-2 px-3 py-4 rounded-l-lg text-primary-foreground font-medium text-sm transition-all duration-200 shadow-lg",
             button.bgClass,
             activePanel === button.id && "pr-4"
           )}
