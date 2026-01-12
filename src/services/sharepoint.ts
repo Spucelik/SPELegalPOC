@@ -547,3 +547,153 @@ export async function fetchCaseSummary(
   
   return null;
 }
+
+export interface KeyDate {
+  description: string;
+  date: string;
+}
+
+// Fetch key dates using Microsoft Copilot retrieval API
+export async function fetchKeyDates(
+  accessToken: string,
+  caseTitle: string
+): Promise<KeyDate[]> {
+  const url = "https://graph.microsoft.com/beta/copilot/microsoft.graph.retrieval";
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      queryString: `List key dates for the case Filed Next Hearing Discovery Deadline for ${caseTitle}`,
+      dataSource: "sharePointEmbedded",
+      dataSourceConfiguration: {
+        SharePointEmbedded: {
+          ContainerTypeId: SHAREPOINT_CONFIG.CONTAINER_TYPE_ID,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Failed to fetch key dates:", error);
+    return [];
+  }
+
+  const data: CopilotRetrievalResponse = await response.json();
+  
+  // Extract dates from the retrieval hits
+  if (data.retrievalHits && data.retrievalHits.length > 0) {
+    const firstHit = data.retrievalHits[0];
+    if (firstHit.extracts && firstHit.extracts.length > 0 && firstHit.extracts[0].text) {
+      let text = firstHit.extracts[0].text;
+      // Clean up the text
+      text = text.replace(/<page_\d+>/g, '').replace(/<\/page_\d+>/g, '');
+      text = text.replace(/\\_/g, '_').replace(/\\-/g, '-');
+      text = text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
+      text = text.replace(/\\\(/g, '(').replace(/\\\)/g, ')');
+      
+      return parseKeyDates(text);
+    }
+  }
+  
+  return [];
+}
+
+// Parse text to extract key dates with descriptions
+function parseKeyDates(text: string): KeyDate[] {
+  const dates: KeyDate[] = [];
+  
+  // Common date patterns: MM/DD/YYYY, Month DD, YYYY, YYYY-MM-DD
+  const datePatterns = [
+    /(\d{1,2}\/\d{1,2}\/\d{2,4})/g,
+    /(\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b)/gi,
+    /(\d{4}-\d{2}-\d{2})/g,
+    /(\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b)/gi,
+  ];
+  
+  // Keywords that typically precede important dates
+  const dateKeywords = [
+    'filed', 'filing', 'hearing', 'trial', 'discovery', 'deadline', 
+    'motion', 'response', 'due', 'scheduled', 'set for', 'date',
+    'commenced', 'begins', 'ends', 'closing', 'opening'
+  ];
+  
+  // Split text into sentences/segments
+  const segments = text.split(/[.;!\n]+/).filter(s => s.trim());
+  
+  for (const segment of segments) {
+    // Check if segment contains a date keyword
+    const hasKeyword = dateKeywords.some(keyword => 
+      segment.toLowerCase().includes(keyword)
+    );
+    
+    if (hasKeyword) {
+      // Try to find a date in this segment
+      for (const pattern of datePatterns) {
+        const matches = segment.match(pattern);
+        if (matches && matches.length > 0) {
+          // Extract a description from the segment
+          let description = segment.trim();
+          // Clean up the description
+          description = description.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+          
+          // Try to extract a meaningful label
+          const lowerDesc = description.toLowerCase();
+          let label = 'Key Date';
+          
+          if (lowerDesc.includes('filed') || lowerDesc.includes('filing')) {
+            label = 'Filed';
+          } else if (lowerDesc.includes('hearing')) {
+            label = 'Hearing';
+          } else if (lowerDesc.includes('trial')) {
+            label = 'Trial';
+          } else if (lowerDesc.includes('discovery')) {
+            label = 'Discovery Deadline';
+          } else if (lowerDesc.includes('motion')) {
+            label = 'Motion Due';
+          } else if (lowerDesc.includes('response')) {
+            label = 'Response Due';
+          } else if (lowerDesc.includes('deadline')) {
+            label = 'Deadline';
+          }
+          
+          // Format the date
+          const dateStr = matches[0];
+          const formattedDate = formatDateString(dateStr);
+          
+          // Avoid duplicates
+          if (!dates.some(d => d.date === formattedDate && d.description === label)) {
+            dates.push({
+              description: label,
+              date: formattedDate
+            });
+          }
+          break;
+        }
+      }
+    }
+  }
+  
+  return dates.slice(0, 5); // Limit to 5 dates
+}
+
+// Format date string to a readable format
+function formatDateString(dateStr: string): string {
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      });
+    }
+  } catch {
+    // If parsing fails, return original string
+  }
+  return dateStr;
+}

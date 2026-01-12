@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Users, Calendar, Clock, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchCaseSummary } from "@/services/sharepoint";
+import { fetchCaseSummary, fetchKeyDates, KeyDate } from "@/services/sharepoint";
 
 interface CaseSummaryPanelProps {
   containerName?: string;
@@ -18,15 +18,19 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [keyDates, setKeyDates] = useState<KeyDate[]>([]);
+  const [isLoadingDates, setIsLoadingDates] = useState(false);
 
   useEffect(() => {
-    const loadSummary = async () => {
+    const loadData = async () => {
       if (!containerName) {
         setSummary(null);
+        setKeyDates([]);
         return;
       }
 
       setIsLoading(true);
+      setIsLoadingDates(true);
       setError(null);
       setIsExpanded(false);
 
@@ -36,18 +40,24 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
         ]);
         
         if (token) {
-          const result = await fetchCaseSummary(token, containerName);
-          setSummary(result);
+          // Fetch summary and key dates in parallel
+          const [summaryResult, datesResult] = await Promise.all([
+            fetchCaseSummary(token, containerName),
+            fetchKeyDates(token, containerName)
+          ]);
+          setSummary(summaryResult);
+          setKeyDates(datesResult);
         }
       } catch (err) {
-        console.error("Error loading case summary:", err);
-        setError("Failed to load summary");
+        console.error("Error loading case data:", err);
+        setError("Failed to load data");
       } finally {
         setIsLoading(false);
+        setIsLoadingDates(false);
       }
     };
 
-    loadSummary();
+    loadData();
   }, [containerName, getAccessToken]);
 
   const { truncatedSummary, needsTruncation } = useMemo(() => {
@@ -167,20 +177,25 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span>Filed</span>
-              <span className="text-muted-foreground">Jan 15, 2024</span>
+          {isLoadingDates ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading dates...</span>
             </div>
-            <div className="flex justify-between">
-              <span>Next Hearing</span>
-              <span className="text-muted-foreground">Mar 20, 2024</span>
+          ) : keyDates.length > 0 ? (
+            <div className="space-y-2 text-sm">
+              {keyDates.map((keyDate, index) => (
+                <div key={index} className="flex justify-between">
+                  <span>{keyDate.description}</span>
+                  <span className="text-muted-foreground">{keyDate.date}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between">
-              <span>Discovery Deadline</span>
-              <span className="text-muted-foreground">Apr 30, 2024</span>
-            </div>
-          </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">
+              {containerName ? "No key dates found" : "Select a case to view dates"}
+            </p>
+          )}
         </CardContent>
       </Card>
 
