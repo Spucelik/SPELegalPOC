@@ -567,7 +567,7 @@ export async function fetchKeyDates(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      queryString: `List key dates for the case Filed Next Hearing Discovery Deadline for ${caseTitle}`,
+      queryString: `List all important dates, deadlines, hearings, filings, and scheduled events for the case ${caseTitle}`,
       dataSource: "sharePointEmbedded",
       dataSourceConfiguration: {
         SharePointEmbedded: {
