@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SharePointFile } from "@/services/sharepoint";
 import { 
   Folder, 
@@ -17,6 +17,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import FileViewer from "@/components/FileViewer";
 
 interface FileGridProps {
@@ -24,6 +25,8 @@ interface FileGridProps {
   isLoading: boolean;
   folderName: string;
   onFolderClick?: (folderId: string, folderName: string) => void;
+  selectedFiles?: SharePointFile[];
+  onSelectionChange?: (selectedFiles: SharePointFile[]) => void;
 }
 
 function getFileIcon(file: SharePointFile) {
@@ -96,9 +99,21 @@ function isOfficeFile(file: SharePointFile): boolean {
   return false;
 }
 
-export default function FileGrid({ files, isLoading, folderName, onFolderClick }: FileGridProps) {
+export default function FileGrid({ 
+  files, 
+  isLoading, 
+  folderName, 
+  onFolderClick,
+  selectedFiles = [],
+  onSelectionChange
+}: FileGridProps) {
   const [viewerFile, setViewerFile] = useState<SharePointFile | null>(null);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
+
+  // Clear selection when files change (folder navigation)
+  useEffect(() => {
+    onSelectionChange?.([]);
+  }, [files, onSelectionChange]);
 
   const handleItemClick = (file: SharePointFile) => {
     if (file.folder) {
@@ -114,10 +129,31 @@ export default function FileGrid({ files, isLoading, folderName, onFolderClick }
     }
   };
 
+  const handleCheckboxChange = (file: SharePointFile, checked: boolean) => {
+    if (checked) {
+      onSelectionChange?.([...selectedFiles, file]);
+    } else {
+      onSelectionChange?.(selectedFiles.filter(f => f.id !== file.id));
+    }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const allFiles = files.filter(f => !f.folder);
+      onSelectionChange?.(allFiles);
+    } else {
+      onSelectionChange?.([]);
+    }
+  };
+
   const handleCloseViewer = () => {
     setIsViewerOpen(false);
     setViewerFile(null);
   };
+
+  const fileItems = files.filter(f => !f.folder);
+  const allFilesSelected = fileItems.length > 0 && selectedFiles.length === fileItems.length;
+  const someFilesSelected = selectedFiles.length > 0 && selectedFiles.length < fileItems.length;
 
   if (isLoading) {
     return (
@@ -153,6 +189,16 @@ export default function FileGrid({ files, isLoading, folderName, onFolderClick }
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
+              <TableHead className="w-[40px]">
+                {fileItems.length > 0 && (
+                  <Checkbox
+                    checked={allFilesSelected}
+                    onCheckedChange={handleSelectAll}
+                    aria-label="Select all files"
+                    className={someFilesSelected ? "data-[state=checked]:bg-primary" : ""}
+                  />
+                )}
+              </TableHead>
               <TableHead className="w-[50%]">Name</TableHead>
               <TableHead>Modified</TableHead>
               <TableHead>Created</TableHead>
@@ -161,37 +207,50 @@ export default function FileGrid({ files, isLoading, folderName, onFolderClick }
             </TableRow>
           </TableHeader>
           <TableBody>
-            {files.map((file) => (
-              <TableRow 
-                key={file.id} 
-                className="cursor-pointer"
-                onClick={() => handleItemClick(file)}
-              >
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    {getFileIcon(file)}
-                    <span className="hover:text-primary hover:underline transition-colors">
-                      {file.name}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(file.lastModifiedDateTime)}
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {formatDate(file.createdDateTime)}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <User className="w-4 h-4" />
-                    <span>{file.createdBy?.user?.displayName || "Unknown"}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-right text-muted-foreground">
-                  {formatSize(file.size, !!file.folder, file.folder?.childCount)}
-                </TableCell>
-              </TableRow>
-            ))}
+            {files.map((file) => {
+              const isFile = !file.folder;
+              const isSelected = selectedFiles.some(f => f.id === file.id);
+              
+              return (
+                <TableRow 
+                  key={file.id} 
+                  className={`cursor-pointer ${isSelected ? "bg-muted/50" : ""}`}
+                >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    {isFile ? (
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => handleCheckboxChange(file, checked as boolean)}
+                        aria-label={`Select ${file.name}`}
+                      />
+                    ) : null}
+                  </TableCell>
+                  <TableCell onClick={() => handleItemClick(file)}>
+                    <div className="flex items-center gap-3">
+                      {getFileIcon(file)}
+                      <span className="hover:text-primary hover:underline transition-colors">
+                        {file.name}
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground" onClick={() => handleItemClick(file)}>
+                    {formatDate(file.lastModifiedDateTime)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground" onClick={() => handleItemClick(file)}>
+                    {formatDate(file.createdDateTime)}
+                  </TableCell>
+                  <TableCell onClick={() => handleItemClick(file)}>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <User className="w-4 h-4" />
+                      <span>{file.createdBy?.user?.displayName || "Unknown"}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right text-muted-foreground" onClick={() => handleItemClick(file)}>
+                    {formatSize(file.size, !!file.folder, file.folder?.childCount)}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </div>
