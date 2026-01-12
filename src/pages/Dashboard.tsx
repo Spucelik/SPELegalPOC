@@ -28,6 +28,9 @@ import ReportsPanel from "@/components/panels/ReportsPanel";
 
 type PanelType = "caseSummary" | "tools" | "reports";
 
+// Button column width
+const BUTTON_COLUMN_WIDTH = 48;
+
 export default function Dashboard() {
   const { isAuthenticated, isInitialized } = useAuth();
   const navigate = useNavigate();
@@ -41,6 +44,7 @@ export default function Dashboard() {
   // Flyout panel state
   const [activePanel, setActivePanel] = useState<PanelType | null>(null);
   const [pinnedPanels, setPinnedPanels] = useState<Set<PanelType>>(new Set());
+  const [panelWidth, setPanelWidth] = useState(400);
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
@@ -103,8 +107,17 @@ export default function Dashboard() {
     });
   };
 
+  const handlePanelWidthChange = (width: number) => {
+    setPanelWidth(width);
+  };
+
   // Check if any panel is pinned to adjust layout
   const hasPinnedPanel = activePanel !== null && pinnedPanels.has(activePanel);
+  
+  // Calculate right margin for main content
+  const mainContentMarginRight = hasPinnedPanel 
+    ? panelWidth + BUTTON_COLUMN_WIDTH 
+    : BUTTON_COLUMN_WIDTH;
 
   if (!isInitialized) {
     return (
@@ -120,7 +133,10 @@ export default function Dashboard() {
 
       <div className="flex-1 flex relative">
         {/* Sidebar - Cases List */}
-        <aside className="w-80 border-r border-border bg-card flex flex-col">
+        <aside 
+          className="w-80 border-r border-border bg-card flex flex-col transition-all duration-300"
+          style={{ marginRight: 0 }}
+        >
           <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between mb-1">
               <h2 className="text-lg font-semibold text-foreground">Cases</h2>
@@ -206,7 +222,7 @@ export default function Dashboard() {
         <main 
           className="flex-1 overflow-hidden transition-all duration-300"
           style={{ 
-            marginRight: hasPinnedPanel ? '414px' : '56px' // 400px panel + 14px buttons
+            marginRight: `${mainContentMarginRight}px`
           }}
         >
           {selectedContainer ? (
@@ -238,6 +254,7 @@ export default function Dashboard() {
           onClose={() => handlePanelClose("caseSummary")}
           isPinned={pinnedPanels.has("caseSummary")}
           onPinToggle={() => handlePinToggle("caseSummary")}
+          onWidthChange={handlePanelWidthChange}
         >
           <CaseSummaryPanel containerName={selectedContainer?.displayName} />
         </FlyoutPanel>
@@ -248,6 +265,7 @@ export default function Dashboard() {
           onClose={() => handlePanelClose("tools")}
           isPinned={pinnedPanels.has("tools")}
           onPinToggle={() => handlePinToggle("tools")}
+          onWidthChange={handlePanelWidthChange}
         >
           <ToolsPanel />
         </FlyoutPanel>
@@ -258,6 +276,7 @@ export default function Dashboard() {
           onClose={() => handlePanelClose("reports")}
           isPinned={pinnedPanels.has("reports")}
           onPinToggle={() => handlePinToggle("reports")}
+          onWidthChange={handlePanelWidthChange}
         >
           <ReportsPanel />
         </FlyoutPanel>
