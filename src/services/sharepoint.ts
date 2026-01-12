@@ -561,6 +561,101 @@ export async function fetchCaseSummary(
   return null;
 }
 
+export interface CasePersonnel {
+  role: string;
+  name: string;
+}
+
+// Fetch case personnel using Microsoft Copilot retrieval API
+export async function fetchCasePersonnel(
+  accessToken: string,
+  caseTitle: string
+): Promise<CasePersonnel[]> {
+  const url = "https://graph.microsoft.com/beta/copilot/microsoft.graph.retrieval";
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      queryString: `Who is the judge, defense counsel, defense attorney, prosecuting counsel, prosecutor, and plaintiff attorney for the case ${caseTitle}?`,
+      dataSource: "sharePointEmbedded",
+      dataSourceConfiguration: {
+        SharePointEmbedded: {
+          ContainerTypeId: SHAREPOINT_CONFIG.CONTAINER_TYPE_ID,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Failed to fetch case personnel:", error);
+    return [];
+  }
+
+  const data: CopilotRetrievalResponse = await response.json();
+  
+  if (data.retrievalHits && data.retrievalHits.length > 0) {
+    const firstHit = data.retrievalHits[0];
+    if (firstHit.extracts && firstHit.extracts.length > 0 && firstHit.extracts[0].text) {
+      const text = cleanCopilotText(firstHit.extracts[0].text);
+      return parseCasePersonnel(text);
+    }
+  }
+  
+  return [];
+}
+
+// Parse text to extract case personnel
+function parseCasePersonnel(text: string): CasePersonnel[] {
+  const personnel: CasePersonnel[] = [];
+  const lowerText = text.toLowerCase();
+  
+  // Patterns to find personnel with their names
+  const personnelPatterns: { role: string; patterns: RegExp[] }[] = [
+    {
+      role: 'Judge',
+      patterns: [
+        /(?:judge|hon\.|honorable|justice)\s+([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gi,
+        /([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+),?\s+(?:judge|j\.)/gi,
+      ]
+    },
+    {
+      role: 'Defense Counsel',
+      patterns: [
+        /(?:defense counsel|defense attorney|attorney for defendant|counsel for defendant|defendant'?s? (?:counsel|attorney))[:\s]+([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+)/gi,
+        /([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+),?\s+(?:for|counsel for|attorney for)\s+(?:the\s+)?(?:defendant|appellant|defense)/gi,
+      ]
+    },
+    {
+      role: 'Prosecuting Counsel',
+      patterns: [
+        /(?:prosecut(?:ing|or)|district attorney|state'?s? (?:counsel|attorney)|attorney for (?:the )?state|counsel for (?:the )?state|appellee)[:\s]+([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+)/gi,
+        /([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+),?\s+(?:for|counsel for|attorney for)\s+(?:the\s+)?(?:state|prosecution|appellee|plaintiff)/gi,
+      ]
+    },
+  ];
+  
+  for (const { role, patterns } of personnelPatterns) {
+    for (const pattern of patterns) {
+      const matches = text.matchAll(pattern);
+      for (const match of matches) {
+        const name = match[1]?.trim();
+        if (name && name.length > 3 && !personnel.some(p => p.role === role)) {
+          personnel.push({ role, name });
+          break;
+        }
+      }
+      if (personnel.some(p => p.role === role)) break;
+    }
+  }
+  
+  return personnel;
+}
+
 export interface KeyDate {
   description: string;
   date: string;
