@@ -487,9 +487,13 @@ async function uploadLargeFile(
 
 // Copilot retrieval response interface
 export interface CopilotRetrievalResponse {
-  value?: Array<{
-    text?: string;
+  retrievalHits?: Array<{
     webUrl?: string;
+    extracts?: Array<{
+      text?: string;
+      relevanceScore?: number;
+    }>;
+    resourceType?: string;
   }>;
 }
 
@@ -525,9 +529,17 @@ export async function fetchCaseSummary(
 
   const data: CopilotRetrievalResponse = await response.json();
   
-  // Extract and return the text from the first result
-  if (data.value && data.value.length > 0 && data.value[0].text) {
-    return data.value[0].text;
+  // Extract and return the text from the first retrieval hit's extract
+  if (data.retrievalHits && data.retrievalHits.length > 0) {
+    const firstHit = data.retrievalHits[0];
+    if (firstHit.extracts && firstHit.extracts.length > 0 && firstHit.extracts[0].text) {
+      // Clean up the text by removing page markers and excessive whitespace
+      let text = firstHit.extracts[0].text;
+      text = text.replace(/<page_\d+>/g, '').replace(/<\/page_\d+>/g, '');
+      text = text.replace(/\\_/g, '_').replace(/\\-/g, '-').replace(/\\[/g, '[').replace(/\\]/g, ']').replace(/\\(/g, '(').replace(/\\)/g, ')');
+      text = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+      return text;
+    }
   }
   
   return null;
