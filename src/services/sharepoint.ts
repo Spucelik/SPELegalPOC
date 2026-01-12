@@ -536,7 +536,10 @@ export async function fetchCaseSummary(
       // Clean up the text by removing page markers and excessive whitespace
       let text = firstHit.extracts[0].text;
       text = text.replace(/<page_\d+>/g, '').replace(/<\/page_\d+>/g, '');
-      text = text.replace(/\\_/g, '_').replace(/\\-/g, '-').replace(/\\[/g, '[').replace(/\\]/g, ']').replace(/\\(/g, '(').replace(/\\)/g, ')');
+      // Remove escaped markdown characters
+      text = text.replace(/\\_/g, '_').replace(/\\-/g, '-');
+      text = text.replace(/\\\[/g, '[').replace(/\\\]/g, ']');
+      text = text.replace(/\\\(/g, '(').replace(/\\\)/g, ')');
       text = text.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
       return text;
     }
