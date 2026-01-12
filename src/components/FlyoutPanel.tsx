@@ -9,6 +9,7 @@ interface FlyoutPanelProps {
   onClose: () => void;
   isPinned: boolean;
   onPinToggle: () => void;
+  onWidthChange?: (width: number) => void;
   children: ReactNode;
   className?: string;
 }
@@ -19,6 +20,7 @@ export default function FlyoutPanel({
   onClose,
   isPinned,
   onPinToggle,
+  onWidthChange,
   children,
   className
 }: FlyoutPanelProps) {
@@ -27,6 +29,13 @@ export default function FlyoutPanel({
   const isResizing = useRef(false);
   const minWidth = 300;
   const maxWidth = window.innerWidth * 0.6;
+
+  // Notify parent of width changes
+  useEffect(() => {
+    if (isOpen && onWidthChange) {
+      onWidthChange(width);
+    }
+  }, [width, isOpen, onWidthChange]);
 
   // Handle click outside to close (only if not pinned)
   useEffect(() => {
@@ -83,14 +92,20 @@ export default function FlyoutPanel({
 
   if (!isOpen) return null;
 
+  // Button column width is approximately 48px
+  const buttonColumnWidth = 48;
+
   return (
     <div
       ref={panelRef}
       className={cn(
-        "fixed top-0 right-14 h-full bg-background border-l shadow-xl z-40 flex flex-col animate-slide-in-right",
+        "fixed top-14 h-[calc(100vh-56px)] bg-background border-l shadow-xl z-40 flex flex-col animate-slide-in-right",
         className
       )}
-      style={{ width: `${width}px` }}
+      style={{ 
+        width: `${width}px`,
+        right: `${buttonColumnWidth}px`
+      }}
     >
       {/* Resize Handle */}
       <div
@@ -102,7 +117,7 @@ export default function FlyoutPanel({
         </div>
       </div>
 
-      {/* Header */}
+      {/* Header - aligned with bottom of blue header */}
       <div className="flex items-center justify-between p-4 border-b bg-muted/30">
         <h3 className="font-semibold text-lg">{title}</h3>
         <div className="flex items-center gap-1">
