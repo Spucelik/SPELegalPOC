@@ -119,11 +119,8 @@ export default function FileGrid({
     if (file.folder) {
       // Navigate into folder
       onFolderClick?.(file.id, file.name);
-    } else if (isOfficeFile(file)) {
-      // Open Office files in new tab
-      window.open(file.webUrl, "_blank");
     } else {
-      // Open file viewer for non-Office files
+      // Open all files in the viewer (including Office files)
       setViewerFile(file);
       setIsViewerOpen(true);
     }
