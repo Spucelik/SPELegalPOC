@@ -17,7 +17,15 @@ import {
   ChevronDown,
   FolderPlus,
   FilePlus,
-  Plus
+  Plus,
+  Eye,
+  Pencil,
+  Share2,
+  FileText,
+  Download,
+  Trash2,
+  File,
+  FolderUp
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -279,6 +287,7 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
             Home
           </Button>
           
+          {/* New Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" className="h-8 bg-primary">
@@ -299,9 +308,77 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="outline" size="sm" className="h-8" onClick={() => setIsUploadDialogOpen(true)}>
-            <Upload className="w-4 h-4 mr-1.5" />
-            Upload
+          {/* Upload Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8">
+                <Upload className="w-4 h-4 mr-1.5" />
+                Upload
+                <ChevronDown className="w-4 h-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem onClick={() => setIsUploadDialogOpen(true)}>
+                <File className="w-4 h-4 mr-2" />
+                Files
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setIsUploadDialogOpen(true)}>
+                <FolderUp className="w-4 h-4 mr-2" />
+                Folder
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* View Button */}
+          <Button variant="ghost" size="sm" className="h-8">
+            <Eye className="w-4 h-4 mr-1.5" />
+            View
+          </Button>
+
+          {/* Edit Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" className="h-8">
+                <Pencil className="w-4 h-4 mr-1.5" />
+                Edit
+                <ChevronDown className="w-4 h-4 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              <DropdownMenuItem>
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                Move
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                Copy
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Share Button */}
+          <Button variant="ghost" size="sm" className="h-8">
+            <Share2 className="w-4 h-4 mr-1.5" />
+            Share
+          </Button>
+
+          {/* Save as PDF Button */}
+          <Button variant="ghost" size="sm" className="h-8">
+            <FileText className="w-4 h-4 mr-1.5" />
+            Save as PDF
+          </Button>
+
+          {/* Download Button */}
+          <Button variant="ghost" size="sm" className="h-8">
+            <Download className="w-4 h-4 mr-1.5" />
+            Download
+          </Button>
+
+          {/* Delete Button */}
+          <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive">
+            <Trash2 className="w-4 h-4 mr-1.5" />
+            Delete
           </Button>
         </div>
       </div>
