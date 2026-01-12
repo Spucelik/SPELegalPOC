@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Users, Calendar, Clock, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchCaseSummary, fetchKeyDates, fetchJurisdiction, KeyDate } from "@/services/sharepoint";
+import { fetchCaseSummary, fetchKeyDates, fetchJurisdiction, fetchCasePersonnel, KeyDate, CasePersonnel } from "@/services/sharepoint";
 
 interface CaseSummaryPanelProps {
   containerName?: string;
@@ -21,6 +21,8 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
   const [keyDates, setKeyDates] = useState<KeyDate[]>([]);
   const [isLoadingDates, setIsLoadingDates] = useState(false);
   const [jurisdiction, setJurisdiction] = useState<string | null>(null);
+  const [casePersonnel, setCasePersonnel] = useState<CasePersonnel[]>([]);
+  const [isLoadingPersonnel, setIsLoadingPersonnel] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -28,11 +30,13 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
         setSummary(null);
         setKeyDates([]);
         setJurisdiction(null);
+        setCasePersonnel([]);
         return;
       }
 
       setIsLoading(true);
       setIsLoadingDates(true);
+      setIsLoadingPersonnel(true);
       setError(null);
       setIsExpanded(false);
 
@@ -42,15 +46,17 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
         ]);
         
         if (token) {
-          // Fetch summary, key dates, and jurisdiction in parallel
-          const [summaryResult, datesResult, jurisdictionResult] = await Promise.all([
+          // Fetch all data in parallel
+          const [summaryResult, datesResult, jurisdictionResult, personnelResult] = await Promise.all([
             fetchCaseSummary(token, containerName),
             fetchKeyDates(token, containerName),
-            fetchJurisdiction(token, containerName)
+            fetchJurisdiction(token, containerName),
+            fetchCasePersonnel(token, containerName)
           ]);
           setSummary(summaryResult);
           setKeyDates(datesResult);
           setJurisdiction(jurisdictionResult);
+          setCasePersonnel(personnelResult);
         }
       } catch (err) {
         console.error("Error loading case data:", err);
@@ -58,6 +64,7 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
       } finally {
         setIsLoading(false);
         setIsLoadingDates(false);
+        setIsLoadingPersonnel(false);
       }
     };
 
@@ -158,24 +165,29 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Users className="h-4 w-4" />
-            Team Members
+            Case Personnel
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span>Lead Attorney</span>
-              <span className="text-muted-foreground">John Smith</span>
+          {isLoadingPersonnel ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm">Loading personnel...</span>
             </div>
-            <div className="flex justify-between">
-              <span>Paralegal</span>
-              <span className="text-muted-foreground">Jane Doe</span>
+          ) : casePersonnel.length > 0 ? (
+            <div className="space-y-2 text-sm">
+              {casePersonnel.map((person, index) => (
+                <div key={index} className="flex justify-between">
+                  <span>{person.role}</span>
+                  <span className="text-muted-foreground">{person.name}</span>
+                </div>
+              ))}
             </div>
-            <div className="flex justify-between">
-              <span>Associate</span>
-              <span className="text-muted-foreground">Mike Johnson</span>
-            </div>
-          </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">
+              {containerName ? "No personnel found" : "Select a case to view personnel"}
+            </p>
+          )}
         </CardContent>
       </Card>
 
