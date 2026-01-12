@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { 
   SharePointContainer, 
+  SharePointFile,
   createFolder, 
   createEmptyFile, 
   uploadFile, 
@@ -63,6 +64,9 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<Map<string, number>>(new Map());
   const [uploadStatus, setUploadStatus] = useState<Map<string, "pending" | "uploading" | "success" | "error">>(new Map());
+  const [selectedFiles, setSelectedFiles] = useState<SharePointFile[]>([]);
+
+  const hasSelectedFiles = selectedFiles.length > 0;
 
   // Reset when selected folder changes from sidebar
   useEffect(() => {
@@ -330,7 +334,7 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
           </DropdownMenu>
 
           {/* View Button */}
-          <Button variant="ghost" size="sm" className="h-8">
+          <Button variant="ghost" size="sm" className="h-8" disabled={!hasSelectedFiles}>
             <Eye className="w-4 h-4 mr-1.5" />
             View
           </Button>
@@ -338,7 +342,7 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
           {/* Edit Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8">
+              <Button variant="ghost" size="sm" className="h-8" disabled={!hasSelectedFiles}>
                 <Pencil className="w-4 h-4 mr-1.5" />
                 Edit
                 <ChevronDown className="w-4 h-4 ml-1" />
@@ -358,25 +362,25 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
           </DropdownMenu>
 
           {/* Share Button */}
-          <Button variant="ghost" size="sm" className="h-8">
+          <Button variant="ghost" size="sm" className="h-8" disabled={!hasSelectedFiles}>
             <Share2 className="w-4 h-4 mr-1.5" />
             Share
           </Button>
 
           {/* Save as PDF Button */}
-          <Button variant="ghost" size="sm" className="h-8">
+          <Button variant="ghost" size="sm" className="h-8" disabled={!hasSelectedFiles}>
             <FileText className="w-4 h-4 mr-1.5" />
             Save as PDF
           </Button>
 
           {/* Download Button */}
-          <Button variant="ghost" size="sm" className="h-8">
+          <Button variant="ghost" size="sm" className="h-8" disabled={!hasSelectedFiles}>
             <Download className="w-4 h-4 mr-1.5" />
             Download
           </Button>
 
           {/* Delete Button */}
-          <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive">
+          <Button variant="ghost" size="sm" className="h-8 text-destructive hover:text-destructive" disabled={!hasSelectedFiles}>
             <Trash2 className="w-4 h-4 mr-1.5" />
             Delete
           </Button>
@@ -413,6 +417,8 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
           isLoading={isLoading} 
           folderName={currentFolderName}
           onFolderClick={handleFolderClick}
+          selectedFiles={selectedFiles}
+          onSelectionChange={setSelectedFiles}
         />
       ) : (
         <div className="flex-1 overflow-auto flex items-center justify-center">
