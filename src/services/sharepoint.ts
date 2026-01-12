@@ -484,3 +484,51 @@ async function uploadLargeFile(
 
   return result;
 }
+
+// Copilot retrieval response interface
+export interface CopilotRetrievalResponse {
+  value?: Array<{
+    text?: string;
+    webUrl?: string;
+  }>;
+}
+
+// Fetch case summary using Microsoft Copilot retrieval API
+export async function fetchCaseSummary(
+  accessToken: string,
+  caseTitle: string
+): Promise<string | null> {
+  const url = "https://graph.microsoft.com/beta/copilot/microsoft.graph.retrieval";
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      queryString: `Summarize the case for ${caseTitle}`,
+      dataSource: "sharePointEmbedded",
+      dataSourceConfiguration: {
+        SharePointEmbedded: {
+          ContainerTypeId: SHAREPOINT_CONFIG.CONTAINER_TYPE_ID,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Failed to fetch case summary:", error);
+    return null;
+  }
+
+  const data: CopilotRetrievalResponse = await response.json();
+  
+  // Extract and return the text from the first result
+  if (data.value && data.value.length > 0 && data.value[0].text) {
+    return data.value[0].text;
+  }
+  
+  return null;
+}
