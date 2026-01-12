@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Users, Calendar, Clock, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { FileText, Users, Calendar, Clock, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchCaseSummary } from "@/services/sharepoint";
 
@@ -8,11 +9,15 @@ interface CaseSummaryPanelProps {
   containerName?: string;
 }
 
+const MAX_LINES = 10;
+const APPROX_CHARS_PER_LINE = 60;
+
 export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProps) {
   const { getAccessToken } = useAuth();
   const [summary, setSummary] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     const loadSummary = async () => {
@@ -23,6 +28,7 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
 
       setIsLoading(true);
       setError(null);
+      setIsExpanded(false);
 
       try {
         const token = await getAccessToken([
@@ -43,6 +49,34 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
 
     loadSummary();
   }, [containerName, getAccessToken]);
+
+  const { truncatedSummary, needsTruncation } = useMemo(() => {
+    if (!summary) return { truncatedSummary: null, needsTruncation: false };
+    
+    const maxChars = MAX_LINES * APPROX_CHARS_PER_LINE;
+    if (summary.length <= maxChars) {
+      return { truncatedSummary: summary, needsTruncation: false };
+    }
+    
+    // Find a good break point (end of sentence or word)
+    let breakPoint = maxChars;
+    const sentenceEnd = summary.lastIndexOf('. ', maxChars);
+    if (sentenceEnd > maxChars * 0.7) {
+      breakPoint = sentenceEnd + 1;
+    } else {
+      const wordEnd = summary.lastIndexOf(' ', maxChars);
+      if (wordEnd > maxChars * 0.8) {
+        breakPoint = wordEnd;
+      }
+    }
+    
+    return { 
+      truncatedSummary: summary.substring(0, breakPoint) + '...', 
+      needsTruncation: true 
+    };
+  }, [summary]);
+
+  const displayText = isExpanded ? summary : truncatedSummary;
 
   return (
     <div className="space-y-4">
@@ -67,8 +101,30 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
               </div>
             ) : error ? (
               <p className="text-sm text-destructive mt-1">{error}</p>
-            ) : summary ? (
-              <p className="text-sm mt-1 leading-relaxed">{summary}</p>
+            ) : displayText ? (
+              <div className="mt-1">
+                <p className="text-sm leading-relaxed">{displayText}</p>
+                {needsTruncation && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 mt-2 text-primary"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                  >
+                    {isExpanded ? (
+                      <>
+                        <ChevronUp className="h-3 w-3 mr-1" />
+                        Show less
+                      </>
+                    ) : (
+                      <>
+                        <ChevronDown className="h-3 w-3 mr-1" />
+                        Show more
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground mt-1 italic">
                 {containerName ? "No summary available" : "Select a case to view summary"}
