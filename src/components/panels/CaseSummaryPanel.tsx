@@ -1,12 +1,49 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { FileText, Users, Calendar, Clock } from "lucide-react";
+import { FileText, Users, Calendar, Clock, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { fetchCaseSummary } from "@/services/sharepoint";
 
 interface CaseSummaryPanelProps {
   containerName?: string;
 }
 
 export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProps) {
+  const { getAccessToken } = useAuth();
+  const [summary, setSummary] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadSummary = async () => {
+      if (!containerName) {
+        setSummary(null);
+        return;
+      }
+
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        const token = await getAccessToken([
+          "https://graph.microsoft.com/.default"
+        ]);
+        
+        if (token) {
+          const result = await fetchCaseSummary(token, containerName);
+          setSummary(result);
+        }
+      } catch (err) {
+        console.error("Error loading case summary:", err);
+        setError("Failed to load summary");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadSummary();
+  }, [containerName, getAccessToken]);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -22,12 +59,21 @@ export default function CaseSummaryPanel({ containerName }: CaseSummaryPanelProp
             <p className="font-medium">{containerName || "No case selected"}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground">Status</p>
-            <Badge variant="outline" className="mt-1">Active</Badge>
-          </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Case Type</p>
-            <p className="font-medium">Litigation</p>
+            <p className="text-sm text-muted-foreground">Summary</p>
+            {isLoading ? (
+              <div className="flex items-center gap-2 text-muted-foreground mt-1">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-sm">Generating summary...</span>
+              </div>
+            ) : error ? (
+              <p className="text-sm text-destructive mt-1">{error}</p>
+            ) : summary ? (
+              <p className="text-sm mt-1 leading-relaxed">{summary}</p>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-1 italic">
+                {containerName ? "No summary available" : "Select a case to view summary"}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>
