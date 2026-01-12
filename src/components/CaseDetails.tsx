@@ -1,5 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
-import { SharePointContainer, createFolder, createEmptyFile } from "@/services/sharepoint";
+import { 
+  SharePointContainer, 
+  createFolder, 
+  createEmptyFile, 
+  uploadFile, 
+  checkFileExists 
+} from "@/services/sharepoint";
 import { FolderNode } from "@/hooks/useFolders";
 import { useFiles } from "@/hooks/useFiles";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,6 +29,7 @@ import {
 import FileGrid from "@/components/FileGrid";
 import NewFolderDialog from "@/components/NewFolderDialog";
 import NewDocumentDialog from "@/components/NewDocumentDialog";
+import FileUploadDialog from "@/components/FileUploadDialog";
 import { toast } from "sonner";
 
 interface BreadcrumbItem {
@@ -43,7 +50,11 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbItem[]>([]);
   const [isNewFolderDialogOpen, setIsNewFolderDialogOpen] = useState(false);
   const [isNewDocumentDialogOpen, setIsNewDocumentDialogOpen] = useState(false);
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<Map<string, number>>(new Map());
+  const [uploadStatus, setUploadStatus] = useState<Map<string, "pending" | "uploading" | "success" | "error">>(new Map());
 
   // Reset when selected folder changes from sidebar
   useEffect(() => {
@@ -149,6 +160,92 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
     }
   }, [container?.id, currentFolderId, getAccessToken, loadFolderContents]);
 
+  const handleUploadFiles = useCallback(async (
+    files: File[],
+    conflictBehavior: "replace" | "rename"
+  ): Promise<{ duplicates: string[] }> => {
+    if (!container?.id) return { duplicates: [] };
+    
+    const accessToken = await getAccessToken(["FileStorageContainer.Selected"]);
+    if (!accessToken) {
+      toast.error("Failed to get access token");
+      return { duplicates: [] };
+    }
+
+    // Check for duplicates first
+    const duplicates: string[] = [];
+    for (const file of files) {
+      try {
+        const exists = await checkFileExists(
+          accessToken,
+          container.id,
+          currentFolderId,
+          file.name
+        );
+        if (exists) {
+          duplicates.push(file.name);
+        }
+      } catch {
+        // File doesn't exist, which is fine
+      }
+    }
+
+    // If there are duplicates and we're not replacing, return them for user decision
+    if (duplicates.length > 0 && conflictBehavior === "rename") {
+      // Only return duplicates without uploading
+      return { duplicates };
+    }
+
+    setIsUploading(true);
+    
+    // Initialize progress and status for all files
+    const initialProgress = new Map<string, number>();
+    const initialStatus = new Map<string, "pending" | "uploading" | "success" | "error">();
+    files.forEach(file => {
+      initialProgress.set(file.name, 0);
+      initialStatus.set(file.name, "pending");
+    });
+    setUploadProgress(initialProgress);
+    setUploadStatus(initialStatus);
+
+    // Upload files
+    for (const file of files) {
+      setUploadStatus(prev => new Map(prev).set(file.name, "uploading"));
+      
+      try {
+        await uploadFile(
+          accessToken,
+          container.id,
+          currentFolderId,
+          file,
+          conflictBehavior,
+          (fileName, progress) => {
+            setUploadProgress(prev => new Map(prev).set(fileName, progress));
+          }
+        );
+        
+        setUploadStatus(prev => new Map(prev).set(file.name, "success"));
+      } catch (error) {
+        console.error(`Failed to upload ${file.name}:`, error);
+        setUploadStatus(prev => new Map(prev).set(file.name, "error"));
+      }
+    }
+
+    setIsUploading(false);
+    
+    // Refresh folder contents
+    if (currentFolderId) {
+      loadFolderContents(currentFolderId);
+    }
+    
+    const successCount = Array.from(uploadStatus.values()).filter(s => s === "success").length;
+    if (successCount > 0) {
+      toast.success(`${successCount} file(s) uploaded successfully`);
+    }
+
+    return { duplicates: [] };
+  }, [container?.id, currentFolderId, getAccessToken, loadFolderContents, uploadStatus]);
+
   if (!container) {
     return null;
   }
@@ -202,7 +299,7 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <Button variant="outline" size="sm" className="h-8">
+          <Button variant="outline" size="sm" className="h-8" onClick={() => setIsUploadDialogOpen(true)}>
             <Upload className="w-4 h-4 mr-1.5" />
             Upload
           </Button>
@@ -263,6 +360,15 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
         onClose={() => setIsNewDocumentDialogOpen(false)}
         onCreateFile={handleCreateFile}
         isCreating={isCreating}
+      />
+
+      <FileUploadDialog
+        isOpen={isUploadDialogOpen}
+        onClose={() => setIsUploadDialogOpen(false)}
+        onUploadFiles={handleUploadFiles}
+        isUploading={isUploading}
+        uploadProgress={uploadProgress}
+        uploadStatus={uploadStatus}
       />
     </div>
   );
