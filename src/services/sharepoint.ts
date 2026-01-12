@@ -615,11 +615,21 @@ function parseKeyDates(text: string): KeyDate[] {
     /(\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\b)/gi,
   ];
   
-  // Keywords that typically precede important dates
+  // Keywords that typically precede important dates in legal documents
   const dateKeywords = [
     'filed', 'filing', 'hearing', 'trial', 'discovery', 'deadline', 
     'motion', 'response', 'due', 'scheduled', 'set for', 'date',
-    'commenced', 'begins', 'ends', 'closing', 'opening'
+    'commenced', 'begins', 'ends', 'closing', 'opening',
+    // Additional legal terms
+    'judgment', 'rendered', 'subpoena', 'subpoenaed', 'closed', 'dismissed',
+    'appeal', 'appealed', 'verdict', 'sentenced', 'sentencing', 'arraignment',
+    'deposition', 'mediation', 'arbitration', 'settlement', 'order', 'ordered',
+    'entered', 'signed', 'executed', 'served', 'service', 'notice',
+    'continuance', 'continued', 'postponed', 'rescheduled', 'adjourned',
+    'pretrial', 'pre-trial', 'status', 'conference', 'review',
+    'plea', 'indictment', 'arraigned', 'bail', 'bond', 'released',
+    'stayed', 'remanded', 'affirmed', 'reversed', 'denied', 'granted',
+    'rehearing', 'reconsideration', 'certified', 'final'
   ];
   
   // Split text into sentences/segments
@@ -645,7 +655,42 @@ function parseKeyDates(text: string): KeyDate[] {
           const lowerDesc = description.toLowerCase();
           let label = 'Key Date';
           
-          if (lowerDesc.includes('filed') || lowerDesc.includes('filing')) {
+          // Legal milestones - check in order of specificity
+          if (lowerDesc.includes('judgment') || lowerDesc.includes('rendered')) {
+            label = 'Judgment Rendered';
+          } else if (lowerDesc.includes('verdict')) {
+            label = 'Verdict';
+          } else if (lowerDesc.includes('sentencing') || lowerDesc.includes('sentenced')) {
+            label = 'Sentencing';
+          } else if (lowerDesc.includes('appeal') && lowerDesc.includes('filed')) {
+            label = 'Appeal Filed';
+          } else if (lowerDesc.includes('appealed')) {
+            label = 'Appealed';
+          } else if (lowerDesc.includes('rehearing')) {
+            label = 'Rehearing';
+          } else if (lowerDesc.includes('subpoena')) {
+            label = 'Subpoena';
+          } else if (lowerDesc.includes('closed') || lowerDesc.includes('dismissed')) {
+            label = 'Case Closed';
+          } else if (lowerDesc.includes('settlement')) {
+            label = 'Settlement';
+          } else if (lowerDesc.includes('mediation')) {
+            label = 'Mediation';
+          } else if (lowerDesc.includes('arbitration')) {
+            label = 'Arbitration';
+          } else if (lowerDesc.includes('deposition')) {
+            label = 'Deposition';
+          } else if (lowerDesc.includes('arraignment') || lowerDesc.includes('arraigned')) {
+            label = 'Arraignment';
+          } else if (lowerDesc.includes('plea')) {
+            label = 'Plea';
+          } else if (lowerDesc.includes('indictment')) {
+            label = 'Indictment';
+          } else if (lowerDesc.includes('pretrial') || lowerDesc.includes('pre-trial')) {
+            label = 'Pretrial';
+          } else if (lowerDesc.includes('status') && lowerDesc.includes('conference')) {
+            label = 'Status Conference';
+          } else if (lowerDesc.includes('filed') || lowerDesc.includes('filing')) {
             label = 'Filed';
           } else if (lowerDesc.includes('hearing')) {
             label = 'Hearing';
@@ -654,11 +699,15 @@ function parseKeyDates(text: string): KeyDate[] {
           } else if (lowerDesc.includes('discovery')) {
             label = 'Discovery Deadline';
           } else if (lowerDesc.includes('motion')) {
-            label = 'Motion Due';
+            label = 'Motion';
           } else if (lowerDesc.includes('response')) {
             label = 'Response Due';
-          } else if (lowerDesc.includes('deadline')) {
+          } else if (lowerDesc.includes('order') || lowerDesc.includes('ordered')) {
+            label = 'Order';
+          } else if (lowerDesc.includes('deadline') || lowerDesc.includes('due')) {
             label = 'Deadline';
+          } else if (lowerDesc.includes('continued') || lowerDesc.includes('postponed') || lowerDesc.includes('rescheduled')) {
+            label = 'Rescheduled';
           }
           
           // Format the date
