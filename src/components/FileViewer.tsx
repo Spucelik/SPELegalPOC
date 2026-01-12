@@ -1,9 +1,27 @@
 import { SharePointFile, getFilePreviewUrl } from "@/services/sharepoint";
-import { X, ExternalLink, Loader2, GripVertical } from "lucide-react";
+import { X, ExternalLink, Loader2, GripVertical, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+
+function isOfficeFile(file: SharePointFile): boolean {
+  const mimeType = file.file?.mimeType || "";
+  const name = file.name.toLowerCase();
+  
+  const officeExtensions = [".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".one", ".vsdx"];
+  const officeMimeTypes = ["word", "excel", "powerpoint", "onenote", "visio", "officedocument"];
+  
+  if (officeExtensions.some(ext => name.endsWith(ext))) {
+    return true;
+  }
+  
+  if (officeMimeTypes.some(type => mimeType.includes(type))) {
+    return true;
+  }
+  
+  return false;
+}
 
 interface FileViewerProps {
   file: SharePointFile | null;
@@ -108,6 +126,18 @@ export default function FileViewer({ file, isOpen, onClose }: FileViewerProps) {
               {file.name}
             </h2>
             <div className="flex items-center gap-1">
+              {isOfficeFile(file) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8"
+                  onClick={() => window.open(file.webUrl, "_blank")}
+                  title="Edit in Office Online"
+                >
+                  <Pencil className="h-4 w-4 mr-1.5" />
+                  Edit in Office
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="icon"

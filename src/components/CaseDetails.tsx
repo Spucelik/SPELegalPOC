@@ -349,14 +349,22 @@ export default function CaseDetails({ container, selectedFolder, onFolderCreated
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-48">
-              <DropdownMenuItem>
-                Rename
+              <DropdownMenuItem onClick={() => {
+                if (selectedFiles.length > 0) {
+                  window.open(selectedFiles[0].webUrl, "_blank");
+                }
+              }}>
+                Edit Online
               </DropdownMenuItem>
-              <DropdownMenuItem>
-                Move
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                Copy
+              <DropdownMenuItem onClick={() => {
+                if (selectedFiles.length > 0) {
+                  // Use odopen protocol for desktop app launch
+                  const file = selectedFiles[0];
+                  const odOpenUrl = `odopen://open/?fileId=${encodeURIComponent(file.id)}&web=${encodeURIComponent(file.webUrl || "")}`;
+                  window.location.href = odOpenUrl;
+                }
+              }}>
+                Edit in Desktop
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
