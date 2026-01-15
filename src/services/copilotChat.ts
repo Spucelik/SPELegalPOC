@@ -1,4 +1,6 @@
-import { SHAREPOINT_CONFIG, GRAPH_ENDPOINT } from "@/config/sharepoint";
+import { SHAREPOINT_CONFIG, GRAPH_ENDPOINT, IChatEmbeddedApiAuthProvider, ChatLaunchConfig } from "@/config/sharepoint";
+
+export type { ChatLaunchConfig };
 
 export interface CopilotMessage {
   role: "user" | "assistant";
@@ -6,21 +8,26 @@ export interface CopilotMessage {
   timestamp: Date;
 }
 
-interface CopilotSearchResponse {
-  value: Array<{
-    hitId: string;
-    rank: number;
-    summary?: string;
-    resource: {
-      "@odata.type": string;
-      name: string;
-      webUrl: string;
-    };
-    extracts?: Array<{
-      text: string;
-    }>;
-  }>;
-}
+// Default launch configuration following SDK patterns
+export const DEFAULT_CHAT_CONFIG: ChatLaunchConfig = {
+  header: "Case Assistant",
+  zeroQueryPrompts: {
+    headerText: "How can I help you with this case?",
+    promptSuggestionList: [
+      { suggestionText: "Summarize the key facts of this case" },
+      { suggestionText: "Who are the parties involved?" },
+      { suggestionText: "What are the important dates?" },
+      { suggestionText: "List the key documents" },
+    ],
+  },
+  suggestedPrompts: [
+    "What are the main legal issues?",
+    "Summarize the evidence",
+    "What is the current status?",
+  ],
+  instruction: "You are a legal case assistant. Provide clear, professional responses based on the case documents.",
+  locale: "en",
+};
 
 // Clean up text from Copilot API responses
 function cleanCopilotText(text: string): string {
@@ -43,23 +50,48 @@ function cleanCopilotText(text: string): string {
   return cleaned;
 }
 
+// Create auth provider following SDK's IChatEmbeddedApiAuthProvider interface
+export function createChatAuthProvider(
+  getToken: (scopes: string[]) => Promise<string | null>
+): IChatEmbeddedApiAuthProvider {
+  return {
+    hostname: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
+    getToken: async () => {
+      // Request token with Container.Selected scope as per SDK documentation
+      const scope = `${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`;
+      const token = await getToken([scope]);
+      if (!token) {
+        throw new Error("Failed to acquire token for Copilot chat");
+      }
+      return token;
+    },
+  };
+}
+
 export async function sendCopilotMessage(
-  accessToken: string,
+  authProvider: IChatEmbeddedApiAuthProvider,
   containerId: string,
   containerName: string,
   userMessage: string,
-  conversationHistory: CopilotMessage[]
+  conversationHistory: CopilotMessage[],
+  config: ChatLaunchConfig = DEFAULT_CHAT_CONFIG
 ): Promise<string> {
+  // Get token using the auth provider
+  const accessToken = await authProvider.getToken();
+
   // Build context from conversation history
   const contextMessages = conversationHistory
     .slice(-6) // Keep last 6 messages for context
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
     .join("\n");
 
+  // Build system instruction from config
+  const systemInstruction = config.instruction || DEFAULT_CHAT_CONFIG.instruction;
+
   // Create a search query that includes the user's question and context
   const queryString = contextMessages 
-    ? `In the context of this conversation:\n${contextMessages}\n\nUser's new question: ${userMessage}`
-    : userMessage;
+    ? `${systemInstruction}\n\nConversation context:\n${contextMessages}\n\nUser's question: ${userMessage}`
+    : `${systemInstruction}\n\nUser's question: ${userMessage}`;
 
   const searchUrl = `${GRAPH_ENDPOINT}/search/query`;
 
@@ -93,7 +125,7 @@ export async function sendCopilotMessage(
   };
 
   try {
-    // First, try to get relevant documents
+    // First, try to get relevant documents using Graph API
     const searchResponse = await fetch(searchUrl, {
       method: "POST",
       headers: {
@@ -105,16 +137,16 @@ export async function sendCopilotMessage(
 
     if (!searchResponse.ok) {
       console.error("Search failed:", await searchResponse.text());
-      // Fall back to Copilot API
-      return await queryCopilotDirectly(accessToken, containerName, userMessage);
+      // Fall back to direct query
+      return await queryCopilotDirectly(accessToken, containerName, userMessage, config);
     }
 
     const searchData = await searchResponse.json();
     const hits = searchData.value?.[0]?.hitsContainers?.[0]?.hits || [];
 
     if (hits.length === 0) {
-      // No results from search, try Copilot API directly
-      return await queryCopilotDirectly(accessToken, containerName, userMessage);
+      // No results from search, try direct query
+      return await queryCopilotDirectly(accessToken, containerName, userMessage, config);
     }
 
     // Build response from search results
@@ -135,18 +167,19 @@ export async function sendCopilotMessage(
       return responses.join("\n\n");
     }
 
-    // If no extracts, try Copilot directly
-    return await queryCopilotDirectly(accessToken, containerName, userMessage);
+    // If no extracts, try direct query
+    return await queryCopilotDirectly(accessToken, containerName, userMessage, config);
   } catch (error) {
     console.error("Chat error:", error);
-    return await queryCopilotDirectly(accessToken, containerName, userMessage);
+    return await queryCopilotDirectly(accessToken, containerName, userMessage, config);
   }
 }
 
 async function queryCopilotDirectly(
   accessToken: string,
   containerName: string,
-  userMessage: string
+  userMessage: string,
+  config: ChatLaunchConfig
 ): Promise<string> {
   const searchUrl = `${GRAPH_ENDPOINT}/search/query`;
 
