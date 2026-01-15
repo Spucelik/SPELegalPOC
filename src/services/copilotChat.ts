@@ -51,15 +51,19 @@ function cleanCopilotText(text: string): string {
 }
 
 // Create auth provider following SDK's IChatEmbeddedApiAuthProvider interface
+// Note: For Graph API calls, we need Graph scopes, not SharePoint scopes
 export function createChatAuthProvider(
   getToken: (scopes: string[]) => Promise<string | null>
 ): IChatEmbeddedApiAuthProvider {
   return {
     hostname: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
     getToken: async () => {
-      // Request token with Container.Selected scope as per SDK documentation
-      const scope = `${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`;
-      const token = await getToken([scope]);
+      // Use Graph API scopes for search queries
+      const scopes = [
+        "https://graph.microsoft.com/Files.Read.All",
+        "https://graph.microsoft.com/Sites.Read.All",
+      ];
+      const token = await getToken(scopes);
       if (!token) {
         throw new Error("Failed to acquire token for Copilot chat");
       }
