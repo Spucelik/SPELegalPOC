@@ -5,6 +5,8 @@ export const SHAREPOINT_CONFIG = {
   CLIENT_ID: "50cbacb0-e16f-4f63-a678-01359bfac87b",
   TENANT_ID: "fc14a141-120b-4368-b125-571da82b7865",
   CONTAINER_TYPE_ID: "9162b1be-e7db-4b0d-bc1a-331df4dea97e",
+  // SharePoint hostname for Copilot API authentication
+  SHAREPOINT_HOSTNAME: "https://fc14a141-120b-4368-b125-571da82b7865.sharepoint.com",
 } as const;
 
 // MSAL Configuration
@@ -23,3 +25,23 @@ export const MSAL_CONFIG = {
 
 // Graph API endpoint
 export const GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0";
+
+// Copilot Chat Auth Provider Interface (matches SDK's IChatEmbeddedApiAuthProvider)
+export interface IChatEmbeddedApiAuthProvider {
+  hostname: string;
+  getToken(): Promise<string>;
+}
+
+// Copilot Chat Launch Configuration (matches SDK's ChatLaunchConfig)
+export interface ChatLaunchConfig {
+  header?: string;
+  zeroQueryPrompts?: {
+    headerText: string;
+    promptSuggestionList: Array<{
+      suggestionText: string;
+    }>;
+  };
+  suggestedPrompts?: string[];
+  instruction?: string;
+  locale?: string;
+}

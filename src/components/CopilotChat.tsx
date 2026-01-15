@@ -1,18 +1,30 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { MessageCircle, X, Send, Loader2, Bot, User } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { MessageCircle, X, Send, Loader2, Bot, User, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { sendCopilotMessage, CopilotMessage } from "@/services/copilotChat";
+import { 
+  sendCopilotMessage, 
+  CopilotMessage, 
+  createChatAuthProvider,
+  DEFAULT_CHAT_CONFIG,
+  type ChatLaunchConfig 
+} from "@/services/copilotChat";
+import { IChatEmbeddedApiAuthProvider } from "@/config/sharepoint";
 
 interface CopilotChatProps {
   containerId: string;
   containerName: string;
+  config?: ChatLaunchConfig;
 }
 
-export default function CopilotChat({ containerId, containerName }: CopilotChatProps) {
+export default function CopilotChat({ 
+  containerId, 
+  containerName, 
+  config = DEFAULT_CHAT_CONFIG 
+}: CopilotChatProps) {
   const { getAccessToken } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
@@ -20,6 +32,19 @@ export default function CopilotChat({ containerId, containerName }: CopilotChatP
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Create auth provider following SDK's IChatEmbeddedApiAuthProvider interface
+  const authProvider: IChatEmbeddedApiAuthProvider = useMemo(() => 
+    createChatAuthProvider(getAccessToken),
+    [getAccessToken]
+  );
+
+  // Merged config with defaults
+  const chatConfig = useMemo(() => ({
+    ...DEFAULT_CHAT_CONFIG,
+    ...config,
+    header: config?.header || containerName,
+  }), [config, containerName]);
 
   // Reset chat when container changes
   useEffect(() => {
@@ -49,12 +74,13 @@ export default function CopilotChat({ containerId, containerName }: CopilotChatP
     }
   }, [isOpen]);
 
-  const handleSendMessage = useCallback(async () => {
-    if (!inputValue.trim() || isLoading) return;
+  const handleSendMessage = useCallback(async (messageText?: string) => {
+    const text = messageText || inputValue.trim();
+    if (!text || isLoading) return;
 
     const userMessage: CopilotMessage = {
       role: "user",
-      content: inputValue.trim(),
+      content: text,
       timestamp: new Date(),
     };
 
@@ -63,21 +89,13 @@ export default function CopilotChat({ containerId, containerName }: CopilotChatP
     setIsLoading(true);
 
     try {
-      const token = await getAccessToken([
-        "https://graph.microsoft.com/Files.Read.All",
-        "https://graph.microsoft.com/Files.ReadWrite.All",
-      ]);
-
-      if (!token) {
-        throw new Error("Failed to get access token");
-      }
-
       const response = await sendCopilotMessage(
-        token,
+        authProvider,
         containerId,
         containerName,
         userMessage.content,
-        messages
+        messages,
+        chatConfig
       );
 
       const assistantMessage: CopilotMessage = {
@@ -98,7 +116,7 @@ export default function CopilotChat({ containerId, containerName }: CopilotChatP
     } finally {
       setIsLoading(false);
     }
-  }, [inputValue, isLoading, getAccessToken, containerId, containerName, messages]);
+  }, [inputValue, isLoading, authProvider, containerId, containerName, messages, chatConfig]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -107,8 +125,15 @@ export default function CopilotChat({ containerId, containerName }: CopilotChatP
     }
   };
 
+  const handleSuggestedPrompt = (prompt: string) => {
+    handleSendMessage(prompt);
+  };
+
   // Don't render if no container is selected
   if (!containerId) return null;
+
+  const zeroQueryPrompts = chatConfig.zeroQueryPrompts;
+  const suggestedPrompts = chatConfig.suggestedPrompts;
 
   return (
     <>
@@ -149,7 +174,9 @@ export default function CopilotChat({ containerId, containerName }: CopilotChatP
             <Bot className="w-5 h-5 text-primary" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-semibold text-foreground truncate">Copilot Assistant</h3>
+            <h3 className="font-semibold text-foreground truncate">
+              {chatConfig.header}
+            </h3>
             <p className="text-xs text-muted-foreground truncate">{containerName}</p>
           </div>
           <Button
@@ -165,14 +192,58 @@ export default function CopilotChat({ containerId, containerName }: CopilotChatP
         {/* Messages Area */}
         <ScrollArea className="flex-1 p-4" ref={scrollRef}>
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center py-8">
-              <Bot className="w-12 h-12 text-muted-foreground/30 mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Ask me anything about the documents in this case.
-              </p>
-              <p className="text-xs text-muted-foreground/70 mt-1">
-                I can help you search, summarize, and analyze case files.
-              </p>
+            <div className="flex flex-col h-full py-4">
+              {/* Zero Query State with Starter Prompts */}
+              <div className="flex flex-col items-center text-center mb-6">
+                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+                  <Sparkles className="w-6 h-6 text-primary" />
+                </div>
+                <p className="text-sm font-medium text-foreground">
+                  {zeroQueryPrompts?.headerText || "How can I help you?"}
+                </p>
+              </div>
+
+              {/* Zero Query Prompt Suggestions */}
+              {zeroQueryPrompts?.promptSuggestionList && (
+                <div className="space-y-2 mb-4">
+                  {zeroQueryPrompts.promptSuggestionList.map((prompt, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSuggestedPrompt(prompt.suggestionText)}
+                      className={cn(
+                        "w-full text-left px-4 py-3 rounded-lg",
+                        "bg-muted/50 hover:bg-muted transition-colors",
+                        "text-sm text-foreground",
+                        "border border-border/50 hover:border-border"
+                      )}
+                    >
+                      {prompt.suggestionText}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Additional Suggested Prompts */}
+              {suggestedPrompts && suggestedPrompts.length > 0 && (
+                <div className="mt-auto">
+                  <p className="text-xs text-muted-foreground mb-2">Or try:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedPrompts.map((prompt, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleSuggestedPrompt(prompt)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-full text-xs",
+                          "bg-primary/10 hover:bg-primary/20 text-primary",
+                          "transition-colors"
+                        )}
+                      >
+                        {prompt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -237,7 +308,7 @@ export default function CopilotChat({ containerId, containerName }: CopilotChatP
               className="flex-1"
             />
             <Button
-              onClick={handleSendMessage}
+              onClick={() => handleSendMessage()}
               disabled={!inputValue.trim() || isLoading}
               size="icon"
             >
