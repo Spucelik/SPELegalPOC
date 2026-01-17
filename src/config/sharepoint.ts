@@ -59,4 +59,5 @@ export interface ChatLaunchConfig {
   suggestedPrompts?: string[];
   instruction?: string;
   locale?: string;
+  chatInputPlaceholder?: string;
 }
