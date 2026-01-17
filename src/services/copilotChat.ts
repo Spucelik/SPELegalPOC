@@ -1,4 +1,12 @@
-import { SHAREPOINT_CONFIG, GRAPH_ENDPOINT, IChatEmbeddedApiAuthProvider, ChatLaunchConfig } from "@/config/sharepoint";
+import { 
+  SHAREPOINT_CONFIG, 
+  GRAPH_ENDPOINT, 
+  GRAPH_BETA_ENDPOINT,
+  COPILOT_SCOPES,
+  GRAPH_SEARCH_SCOPES,
+  IChatEmbeddedApiAuthProvider, 
+  ChatLaunchConfig 
+} from "@/config/sharepoint";
 
 export type { ChatLaunchConfig };
 
@@ -6,6 +14,16 @@ export interface CopilotMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+}
+
+// Response type with optional citations
+export interface CopilotResponse {
+  content: string;
+  citations?: Array<{
+    documentName: string;
+    webUrl: string;
+    snippet?: string;
+  }>;
 }
 
 // Default launch configuration following SDK patterns
@@ -50,26 +68,41 @@ function cleanCopilotText(text: string): string {
   return cleaned;
 }
 
-// Create auth provider following SDK's IChatEmbeddedApiAuthProvider interface
-// Uses default Graph scopes since user already has Files.Read.All and Sites.Read.All consented
+/**
+ * Create auth provider following SDK's IChatEmbeddedApiAuthProvider interface.
+ * Uses SharePoint Container.Selected scope as per Microsoft documentation.
+ * Falls back to Graph scopes if Container.Selected fails.
+ */
 export function createChatAuthProvider(
   getToken: (scopes: string[]) => Promise<string | null>
 ): IChatEmbeddedApiAuthProvider {
   return {
     hostname: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
     getToken: async () => {
-      // Use .default scope to get token with all consented permissions
-      // The user's token already includes Files.Read.All and Sites.Read.All
-      const scopes = ["https://graph.microsoft.com/.default"];
-      const token = await getToken(scopes);
-      if (!token) {
+      // First try Container.Selected scope (official SDK requirement)
+      try {
+        const token = await getToken(COPILOT_SCOPES);
+        if (token) {
+          return token;
+        }
+      } catch (error) {
+        console.warn("Container.Selected scope not available, falling back to Graph scopes:", error);
+      }
+      
+      // Fallback to Graph scopes for search-based functionality
+      const fallbackToken = await getToken(GRAPH_SEARCH_SCOPES);
+      if (!fallbackToken) {
         throw new Error("Failed to acquire token for Copilot chat");
       }
-      return token;
+      return fallbackToken;
     },
   };
 }
 
+/**
+ * Send a message to Copilot using the beta Copilot retrieval API.
+ * Falls back to Graph Search if the beta API is not available.
+ */
 export async function sendCopilotMessage(
   authProvider: IChatEmbeddedApiAuthProvider,
   containerId: string,
@@ -78,88 +111,109 @@ export async function sendCopilotMessage(
   conversationHistory: CopilotMessage[],
   config: ChatLaunchConfig = DEFAULT_CHAT_CONFIG
 ): Promise<string> {
-  // Get token using the auth provider
   const accessToken = await authProvider.getToken();
 
-  // Build context from conversation history
+  // Build conversation context for the Copilot API
   const contextMessages = conversationHistory
-    .slice(-6) // Keep last 6 messages for context
-    .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-    .join("\n");
+    .slice(-6)
+    .map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
 
-  // Build system instruction from config
   const systemInstruction = config.instruction || DEFAULT_CHAT_CONFIG.instruction;
 
-  // Create a search query focused on user's question
-  const searchUrl = `${GRAPH_ENDPOINT}/search/query`;
+  // Try the beta Copilot retrieval API first
+  try {
+    const copilotResponse = await callCopilotRetrievalAPI(
+      accessToken,
+      containerId,
+      containerName,
+      userMessage,
+      contextMessages,
+      systemInstruction
+    );
+    
+    if (copilotResponse) {
+      return copilotResponse;
+    }
+  } catch (error) {
+    console.warn("Beta Copilot API not available, falling back to Graph Search:", error);
+  }
+
+  // Fallback to Graph Search API
+  return await searchBasedResponse(accessToken, containerId, containerName, userMessage, config);
+}
+
+/**
+ * Call the Microsoft Graph beta Copilot retrieval API.
+ * This provides AI-generated responses grounded in container documents.
+ */
+async function callCopilotRetrievalAPI(
+  accessToken: string,
+  containerId: string,
+  containerName: string,
+  userMessage: string,
+  contextMessages: Array<{ role: string; content: string }>,
+  systemInstruction: string
+): Promise<string | null> {
+  const copilotUrl = `${GRAPH_BETA_ENDPOINT}/copilot/retrieval`;
 
   const requestBody = {
     requests: [
       {
         entityTypes: ["driveItem"],
+        contentSources: [`/drives/${containerId}`],
         query: {
-          // Search for the user's question within the container
-          queryString: `${userMessage} AND ContainerTypeId:${SHAREPOINT_CONFIG.CONTAINER_TYPE_ID}`,
+          queryString: userMessage,
         },
-        from: 0,
-        size: 10,
+        groundingOptions: {
+          systemPrompt: systemInstruction,
+          conversationContext: contextMessages,
+        },
       },
     ],
   };
 
-  try {
-    // First, try to get relevant documents using Graph API
-    const searchResponse = await fetch(searchUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
+  const response = await fetch(copilotUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  });
 
-    if (!searchResponse.ok) {
-      console.error("Search failed:", await searchResponse.text());
-      // Fall back to direct query
-      return await queryCopilotDirectly(accessToken, containerName, userMessage, config);
-    }
-
-    const searchData = await searchResponse.json();
-    const hits = searchData.value?.[0]?.hitsContainers?.[0]?.hits || [];
-
-    if (hits.length === 0) {
-      // No results from search, try direct query
-      return await queryCopilotDirectly(accessToken, containerName, userMessage, config);
-    }
-
-    // Build response from search results
-    const responses: string[] = [];
-    
-    for (const hit of hits.slice(0, 5)) {
-      if (hit.extracts && hit.extracts.length > 0) {
-        const extractText = cleanCopilotText(hit.extracts[0].text);
-        if (extractText) {
-          responses.push(`From "${hit.resource?.name || 'document'}":\n${extractText}`);
-        }
-      } else if (hit.summary) {
-        responses.push(`From "${hit.resource?.name || 'document'}":\n${cleanCopilotText(hit.summary)}`);
-      }
-    }
-
-    if (responses.length > 0) {
-      return responses.join("\n\n");
-    }
-
-    // If no extracts, try direct query
-    return await queryCopilotDirectly(accessToken, containerName, userMessage, config);
-  } catch (error) {
-    console.error("Chat error:", error);
-    return await queryCopilotDirectly(accessToken, containerName, userMessage, config);
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Copilot retrieval API error:", response.status, errorText);
+    return null;
   }
+
+  const data = await response.json();
+  
+  // Extract response content from the Copilot API response
+  const responseContent = data.value?.response || data.value?.[0]?.response;
+  
+  if (responseContent) {
+    return cleanCopilotText(responseContent);
+  }
+
+  // Check for any other response format
+  if (data.value?.content) {
+    return cleanCopilotText(data.value.content);
+  }
+
+  return null;
 }
 
-async function queryCopilotDirectly(
+/**
+ * Search-based response using Graph Search API.
+ * Used as fallback when Copilot retrieval API is not available.
+ */
+async function searchBasedResponse(
   accessToken: string,
+  containerId: string,
   containerName: string,
   userMessage: string,
   config: ChatLaunchConfig
@@ -174,13 +228,13 @@ async function queryCopilotDirectly(
           queryString: `${userMessage} AND ContainerTypeId:${SHAREPOINT_CONFIG.CONTAINER_TYPE_ID}`,
         },
         from: 0,
-        size: 5,
+        size: 10,
       },
     ],
   };
 
   try {
-    const response = await fetch(searchUrl, {
+    const searchResponse = await fetch(searchUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -189,35 +243,49 @@ async function queryCopilotDirectly(
       body: JSON.stringify(requestBody),
     });
 
-    if (!response.ok) {
-      throw new Error(`Search failed: ${response.status}`);
+    if (!searchResponse.ok) {
+      console.error("Search failed:", await searchResponse.text());
+      return getNoResultsMessage(containerName, userMessage);
     }
 
-    const data = await response.json();
-    const hits = data.value?.[0]?.hitsContainers?.[0]?.hits || [];
+    const searchData = await searchResponse.json();
+    const hits = searchData.value?.[0]?.hitsContainers?.[0]?.hits || [];
 
     if (hits.length === 0) {
-      return `I couldn't find specific information about "${userMessage}" in the ${containerName} case documents. Try rephrasing your question or asking about a different topic.`;
+      return getNoResultsMessage(containerName, userMessage);
     }
 
+    // Build response from search results with extracts
     const responses: string[] = [];
-    
-    for (const hit of hits.slice(0, 3)) {
+
+    for (const hit of hits.slice(0, 5)) {
       if (hit.extracts && hit.extracts.length > 0) {
         const extractText = cleanCopilotText(hit.extracts[0].text);
         if (extractText) {
-          responses.push(`From "${hit.resource?.name || 'document'}":\n${extractText}`);
+          responses.push(`**${hit.resource?.name || 'Document'}:**\n${extractText}`);
         }
+      } else if (hit.summary) {
+        responses.push(`**${hit.resource?.name || 'Document'}:**\n${cleanCopilotText(hit.summary)}`);
       }
     }
 
     if (responses.length > 0) {
-      return responses.join("\n\n");
+      return `Based on documents in the ${containerName} case:\n\n${responses.join("\n\n")}`;
     }
 
-    return `I found some documents that might be relevant, but couldn't extract specific information. Try asking a more specific question about the ${containerName} case.`;
+    return getNoResultsMessage(containerName, userMessage);
   } catch (error) {
-    console.error("Copilot query error:", error);
+    console.error("Search error:", error);
     return "I'm having trouble accessing the case documents right now. Please try again in a moment.";
   }
+}
+
+/**
+ * Generate a helpful message when no results are found.
+ */
+function getNoResultsMessage(containerName: string, userMessage: string): string {
+  return `I couldn't find specific information about "${userMessage}" in the ${containerName} case documents. Try:
+• Rephrasing your question with different keywords
+• Asking about specific document names or topics
+• Checking if the documents have been uploaded to this case`;
 }
