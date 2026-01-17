@@ -66,16 +66,20 @@ export default function CopilotChat({
   const { getAccessToken } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
-  const hasOpenedChat = useRef(false);
+  const [isChatOpened, setIsChatOpened] = useState(false);
+  const prevContainerId = useRef<string | null>(null);
 
   // Create auth provider following SDK's IChatEmbeddedApiAuthProvider interface
   const authProvider: IChatEmbeddedApiAuthProvider = useMemo(() => ({
     hostname: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
     getToken: async (): Promise<string> => {
+      console.log("Copilot: Requesting token with scopes:", COPILOT_SCOPES);
       const token = await getAccessToken(COPILOT_SCOPES);
       if (!token) {
+        console.error("Copilot: Failed to acquire access token");
         throw new Error("Failed to acquire access token for Copilot");
       }
+      console.log("Copilot: Token acquired successfully");
       return token;
     },
   }), [getAccessToken]);
@@ -89,36 +93,53 @@ export default function CopilotChat({
 
   // Handle API ready callback
   const handleApiReady = useCallback((api: ChatEmbeddedAPI) => {
-    console.log("ChatEmbedded API ready");
+    console.log("ChatEmbedded API ready, containerId:", containerId);
     setChatApi(api);
-  }, []);
+  }, [containerId]);
 
   // Open chat when API is ready and panel is opened
   useEffect(() => {
-    if (chatApi && isOpen && !hasOpenedChat.current) {
-      hasOpenedChat.current = true;
+    if (chatApi && isOpen && !isChatOpened) {
+      console.log("Opening chat with config:", chatConfig);
       chatApi.openChat(chatConfig);
+      setIsChatOpened(true);
     }
-  }, [chatApi, isOpen, chatConfig]);
+  }, [chatApi, isOpen, isChatOpened, chatConfig]);
 
   // Reset state when container changes
   useEffect(() => {
-    setChatApi(null);
-    hasOpenedChat.current = false;
-    setIsOpen(false);
+    if (prevContainerId.current !== containerId) {
+      console.log("Container changed from", prevContainerId.current, "to", containerId);
+      prevContainerId.current = containerId;
+      setChatApi(null);
+      setIsChatOpened(false);
+      setIsOpen(false);
+    }
   }, [containerId]);
 
   // Handle chat close
   const handleChatClose = useCallback((data: object) => {
-    console.log("Chat closed", data);
+    console.log("Chat closed by SDK", data);
     setIsOpen(false);
-    hasOpenedChat.current = false;
+    setIsChatOpened(false);
   }, []);
 
   // Handle notifications
   const handleNotification = useCallback((data: object) => {
     console.log("Chat notification", data);
   }, []);
+
+  // Toggle chat panel
+  const handleToggle = useCallback(() => {
+    const newIsOpen = !isOpen;
+    console.log("Toggling chat panel:", newIsOpen);
+    setIsOpen(newIsOpen);
+    
+    // If closing, reset the chat opened state so it can be reopened
+    if (!newIsOpen) {
+      setIsChatOpened(false);
+    }
+  }, [isOpen]);
 
   // Don't render if no container is selected
   if (!containerId) return null;
@@ -127,7 +148,7 @@ export default function CopilotChat({
     <>
       {/* Chat Bubble Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className={cn(
           "fixed bottom-6 right-6 z-50 flex items-center justify-center",
           "w-14 h-14 rounded-full shadow-lg transition-all duration-300",
@@ -144,7 +165,7 @@ export default function CopilotChat({
         )}
       </button>
 
-      {/* Chat Flyout Panel */}
+      {/* Chat Flyout Panel - Always mount ChatEmbedded when open for proper iframe lifecycle */}
       <div
         className={cn(
           "fixed bottom-24 right-6 z-40 w-[400px] max-w-[calc(100vw-3rem)]",
@@ -152,25 +173,31 @@ export default function CopilotChat({
           "flex flex-col overflow-hidden transition-all duration-300",
           isOpen
             ? "opacity-100 translate-y-0 pointer-events-auto"
-            : "opacity-0 translate-y-4 pointer-events-none"
+            : "opacity-0 translate-y-4 pointer-events-none h-0"
         )}
-        style={{ height: "550px", maxHeight: "calc(100vh - 150px)" }}
+        style={{ 
+          height: isOpen ? "550px" : "0px", 
+          maxHeight: isOpen ? "calc(100vh - 150px)" : "0px" 
+        }}
       >
-        <ThemeProvider theme={fluentTheme}>
-          <ChatEmbedded
-            authProvider={authProvider}
-            containerId={containerId}
-            onApiReady={handleApiReady}
-            onChatClose={handleChatClose}
-            onNotification={handleNotification}
-            themeV8={fluentTheme}
-            style={{ 
-              width: "100%", 
-              height: "100%",
-              border: "none",
-            }}
-          />
-        </ThemeProvider>
+        {isOpen && (
+          <ThemeProvider theme={fluentTheme}>
+            <ChatEmbedded
+              authProvider={authProvider}
+              containerId={containerId}
+              onApiReady={handleApiReady}
+              onChatClose={handleChatClose}
+              onNotification={handleNotification}
+              themeV8={fluentTheme}
+              style={{ 
+                width: "100%", 
+                height: "100%",
+                border: "none",
+                minHeight: "500px",
+              }}
+            />
+          </ThemeProvider>
+        )}
       </div>
     </>
   );
