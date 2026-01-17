@@ -23,8 +23,21 @@ export const MSAL_CONFIG = {
   },
 };
 
-// Graph API endpoint
+// Graph API endpoints
 export const GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0";
+export const GRAPH_BETA_ENDPOINT = "https://graph.microsoft.com/beta";
+
+// Scopes for Copilot - using SharePoint Container.Selected as per SDK documentation
+// The SDK requires this scope pattern: {hostname}/Container.Selected
+export const COPILOT_SCOPES = [
+  `${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`,
+];
+
+// Fallback scopes for Graph Search if Container.Selected is not available
+export const GRAPH_SEARCH_SCOPES = [
+  "https://graph.microsoft.com/Files.Read.All",
+  "https://graph.microsoft.com/Sites.Read.All",
+];
 
 // Copilot Chat Auth Provider Interface (matches SDK's IChatEmbeddedApiAuthProvider)
 export interface IChatEmbeddedApiAuthProvider {
