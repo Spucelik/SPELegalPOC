@@ -5,9 +5,9 @@ export const SHAREPOINT_CONFIG = {
   CLIENT_ID: "50cbacb0-e16f-4f63-a678-01359bfac87b",
   TENANT_ID: "fc14a141-120b-4368-b125-571da82b7865",
   CONTAINER_TYPE_ID: "9162b1be-e7db-4b0d-bc1a-331df4dea97e",
-  // SharePoint hostname for Copilot API authentication (domain only, no https://)
-  // Use tenant name format: {tenant}.sharepoint.com (not tenant ID)
-  SHAREPOINT_HOSTNAME: "pucelikdemo.sharepoint.com",
+  // SharePoint hostname for Copilot API authentication (must include https://)
+  // Use tenant name format: https://{tenant}.sharepoint.com
+  SHAREPOINT_HOSTNAME: "https://pucelikdemo.sharepoint.com",
 } as const;
 
 // MSAL Configuration
@@ -29,9 +29,9 @@ export const GRAPH_ENDPOINT = "https://graph.microsoft.com/v1.0";
 export const GRAPH_BETA_ENDPOINT = "https://graph.microsoft.com/beta";
 
 // Scopes for Copilot - using SharePoint Container.Selected as per SDK documentation
-// The SDK requires this scope pattern: https://{hostname}/Container.Selected
+// The SDK requires this scope pattern: {hostname}/Container.Selected
 export const COPILOT_SCOPES = [
-  `https://${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`,
+  `${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`,
 ];
 
 // Graph API scopes for search-based Copilot functionality
