@@ -117,25 +117,22 @@ export async function sendCopilotMessage(
 
   const systemInstruction = config.instruction || DEFAULT_CHAT_CONFIG.instruction;
 
-  // Try the beta Copilot retrieval API first
-  try {
-    const copilotResponse = await callCopilotRetrievalAPI(
-      accessToken,
-      containerId,
-      containerName,
-      userMessage,
-      contextMessages,
-      systemInstruction
-    );
-    
-    if (copilotResponse) {
-      return copilotResponse;
-    }
-  } catch (error) {
-    console.warn("Beta Copilot API not available, falling back to Graph Search:", error);
+  // Try the beta Copilot retrieval API first (may not be available for all tenants)
+  const copilotResponse = await callCopilotRetrievalAPI(
+    accessToken,
+    containerId,
+    containerName,
+    userMessage,
+    contextMessages,
+    systemInstruction
+  );
+  
+  if (copilotResponse) {
+    return copilotResponse;
   }
 
-  // Fallback to Graph Search API
+  // Fallback to drive search when Copilot API is unavailable
+  console.log("Copilot API unavailable, using drive search fallback");
   return await searchBasedResponse(accessToken, containerId, containerName, userMessage, config);
 }
 
@@ -235,6 +232,8 @@ async function searchWithDriveFilter(
   // Use the drive's children endpoint with filter for broader content listing
   // Then use search endpoint with properly encoded query
   const driveSearchUrl = `${GRAPH_ENDPOINT}/drives/${containerId}/root/search(q='${encodeURIComponent(sanitizedQuery)}')`;
+  
+  console.log("Searching container:", containerId, "for:", sanitizedQuery);
   
   try {
     const response = await fetch(driveSearchUrl, {
