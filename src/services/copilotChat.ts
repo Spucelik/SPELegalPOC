@@ -90,11 +90,7 @@ export async function sendCopilotMessage(
   // Build system instruction from config
   const systemInstruction = config.instruction || DEFAULT_CHAT_CONFIG.instruction;
 
-  // Create a search query that includes the user's question and context
-  const queryString = contextMessages 
-    ? `${systemInstruction}\n\nConversation context:\n${contextMessages}\n\nUser's question: ${userMessage}`
-    : `${systemInstruction}\n\nUser's question: ${userMessage}`;
-
+  // Create a search query focused on user's question
   const searchUrl = `${GRAPH_ENDPOINT}/search/query`;
 
   const requestBody = {
@@ -102,26 +98,11 @@ export async function sendCopilotMessage(
       {
         entityTypes: ["driveItem"],
         query: {
-          queryString: queryString,
+          // Search for the user's question within the container
+          queryString: `${userMessage} AND ContainerTypeId:${SHAREPOINT_CONFIG.CONTAINER_TYPE_ID}`,
         },
-        sharePointOneDriveOptions: {
-          includeHiddenContent: false,
-        },
-        enableTopResults: true,
         from: 0,
         size: 10,
-        queryAlterationOptions: {
-          enableSuggestion: true,
-          enableModification: true,
-        },
-        // Filter to the specific container
-        contentSources: [`/drives/${containerId}`],
-        fields: [
-          "name",
-          "webUrl",
-          "lastModifiedDateTime",
-          "createdBy",
-        ],
       },
     ],
   };
@@ -190,12 +171,8 @@ async function queryCopilotDirectly(
       {
         entityTypes: ["driveItem"],
         query: {
-          queryString: `${userMessage} containerTypeId:${SHAREPOINT_CONFIG.CONTAINER_TYPE_ID}`,
+          queryString: `${userMessage} AND ContainerTypeId:${SHAREPOINT_CONFIG.CONTAINER_TYPE_ID}`,
         },
-        sharePointOneDriveOptions: {
-          includeHiddenContent: false,
-        },
-        enableTopResults: true,
         from: 0,
         size: 5,
       },
