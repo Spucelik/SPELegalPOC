@@ -209,7 +209,7 @@ async function callCopilotRetrievalAPI(
 
 /**
  * Search-based response using Graph Search API.
- * Used as fallback when Copilot retrieval API is not available.
+ * Scoped to the specific container (drive) to only search documents in the selected case.
  */
 async function searchBasedResponse(
   accessToken: string,
@@ -220,13 +220,22 @@ async function searchBasedResponse(
 ): Promise<string> {
   const searchUrl = `${GRAPH_ENDPOINT}/search/query`;
 
+  // Use the container ID as the drive ID to scope search to this specific case
+  // SharePoint Embedded containers ARE Graph drives, so we can filter by driveId
   const requestBody = {
     requests: [
       {
         entityTypes: ["driveItem"],
         query: {
-          queryString: `${userMessage} AND ContainerTypeId:${SHAREPOINT_CONFIG.CONTAINER_TYPE_ID}`,
+          // Scope to specific container/drive using the container ID
+          queryString: userMessage,
         },
+        // Restrict search to the specific drive (container)
+        sharePointOneDriveOptions: {
+          includeContent: "privateContent",
+        },
+        // Filter to only this container's drive
+        contentSources: [`/drives/${containerId}`],
         from: 0,
         size: 10,
       },
@@ -244,40 +253,102 @@ async function searchBasedResponse(
     });
 
     if (!searchResponse.ok) {
-      console.error("Search failed:", await searchResponse.text());
-      return getNoResultsMessage(containerName, userMessage);
+      const errorText = await searchResponse.text();
+      console.error("Search failed:", searchResponse.status, errorText);
+      
+      // Try alternative approach: search with drive filter in query
+      return await searchWithDriveFilter(accessToken, containerId, containerName, userMessage);
     }
 
     const searchData = await searchResponse.json();
     const hits = searchData.value?.[0]?.hitsContainers?.[0]?.hits || [];
 
     if (hits.length === 0) {
-      return getNoResultsMessage(containerName, userMessage);
+      // Try alternative approach before giving up
+      return await searchWithDriveFilter(accessToken, containerId, containerName, userMessage);
     }
 
     // Build response from search results with extracts
-    const responses: string[] = [];
-
-    for (const hit of hits.slice(0, 5)) {
-      if (hit.extracts && hit.extracts.length > 0) {
-        const extractText = cleanCopilotText(hit.extracts[0].text);
-        if (extractText) {
-          responses.push(`**${hit.resource?.name || 'Document'}:**\n${extractText}`);
-        }
-      } else if (hit.summary) {
-        responses.push(`**${hit.resource?.name || 'Document'}:**\n${cleanCopilotText(hit.summary)}`);
-      }
-    }
-
-    if (responses.length > 0) {
-      return `Based on documents in the ${containerName} case:\n\n${responses.join("\n\n")}`;
-    }
-
-    return getNoResultsMessage(containerName, userMessage);
+    return formatSearchResults(hits, containerName);
   } catch (error) {
     console.error("Search error:", error);
     return "I'm having trouble accessing the case documents right now. Please try again in a moment.";
   }
+}
+
+/**
+ * Alternative search approach: directly query the container's drive for content.
+ */
+async function searchWithDriveFilter(
+  accessToken: string,
+  containerId: string,
+  containerName: string,
+  userMessage: string
+): Promise<string> {
+  // Use the drive's search endpoint directly to scope to this container
+  const driveSearchUrl = `${GRAPH_ENDPOINT}/drives/${containerId}/root/search(q='${encodeURIComponent(userMessage)}')`;
+  
+  try {
+    const response = await fetch(driveSearchUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Drive search failed:", await response.text());
+      return getNoResultsMessage(containerName, userMessage);
+    }
+
+    const data = await response.json();
+    const items = data.value || [];
+
+    if (items.length === 0) {
+      return getNoResultsMessage(containerName, userMessage);
+    }
+
+    // Format results from drive search
+    const responses: string[] = items.slice(0, 5).map((item: any) => {
+      const name = item.name || 'Document';
+      const description = item.description || item.webUrl || '';
+      return `**${name}**${description ? `\n${description}` : ''}`;
+    });
+
+    if (responses.length > 0) {
+      return `Found ${items.length} document(s) in the ${containerName} case matching your query:\n\n${responses.join("\n\n")}\n\nWould you like more details about any of these documents?`;
+    }
+
+    return getNoResultsMessage(containerName, userMessage);
+  } catch (error) {
+    console.error("Drive search error:", error);
+    return getNoResultsMessage(containerName, userMessage);
+  }
+}
+
+/**
+ * Format search results into a readable response.
+ */
+function formatSearchResults(hits: any[], containerName: string): string {
+  const responses: string[] = [];
+
+  for (const hit of hits.slice(0, 5)) {
+    if (hit.extracts && hit.extracts.length > 0) {
+      const extractText = cleanCopilotText(hit.extracts[0].text);
+      if (extractText) {
+        responses.push(`**${hit.resource?.name || 'Document'}:**\n${extractText}`);
+      }
+    } else if (hit.summary) {
+      responses.push(`**${hit.resource?.name || 'Document'}:**\n${cleanCopilotText(hit.summary)}`);
+    }
+  }
+
+  if (responses.length > 0) {
+    return `Based on documents in the ${containerName} case:\n\n${responses.join("\n\n")}`;
+  }
+
+  return getNoResultsMessage(containerName, "your query");
 }
 
 /**
