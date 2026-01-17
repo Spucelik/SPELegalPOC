@@ -69,9 +69,11 @@ function cleanCopilotText(text: string): string {
 }
 
 /**
- * Create auth provider following SDK's IChatEmbeddedApiAuthProvider interface.
- * Uses SharePoint Container.Selected scope as per Microsoft documentation.
- * Falls back to Graph scopes if Container.Selected fails.
+ * Create auth provider for Copilot chat.
+ * 
+ * NOTE: The official SharePoint Embedded Copilot SDK requires Container.Selected scope.
+ * Since we're using Graph API directly (SDK not available), we use Graph scopes.
+ * If the SDK becomes available, switch back to COPILOT_SCOPES.
  */
 export function createChatAuthProvider(
   getToken: (scopes: string[]) => Promise<string | null>
@@ -79,22 +81,14 @@ export function createChatAuthProvider(
   return {
     hostname: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
     getToken: async () => {
-      // First try Container.Selected scope (official SDK requirement)
-      try {
-        const token = await getToken(COPILOT_SCOPES);
-        if (token) {
-          return token;
-        }
-      } catch (error) {
-        console.warn("Container.Selected scope not available, falling back to Graph scopes:", error);
-      }
-      
-      // Fallback to Graph scopes for search-based functionality
-      const fallbackToken = await getToken(GRAPH_SEARCH_SCOPES);
-      if (!fallbackToken) {
+      // Use Graph scopes since we're calling Graph API endpoints
+      // Container.Selected is only needed for the official SDK component
+      const token = await getToken(GRAPH_SEARCH_SCOPES);
+      if (!token) {
         throw new Error("Failed to acquire token for Copilot chat");
       }
-      return fallbackToken;
+      console.log("Acquired Graph token for Copilot chat");
+      return token;
     },
   };
 }

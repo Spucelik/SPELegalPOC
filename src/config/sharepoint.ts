@@ -29,11 +29,13 @@ export const GRAPH_BETA_ENDPOINT = "https://graph.microsoft.com/beta";
 
 // Scopes for Copilot - using SharePoint Container.Selected as per SDK documentation
 // The SDK requires this scope pattern: {hostname}/Container.Selected
+// NOTE: Only use these when the official SharePoint Embedded Copilot SDK is available
 export const COPILOT_SCOPES = [
   `${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`,
 ];
 
-// Fallback scopes for Graph Search if Container.Selected is not available
+// Graph API scopes for search-based Copilot functionality
+// Used when calling Graph API endpoints directly (current implementation)
 export const GRAPH_SEARCH_SCOPES = [
   "https://graph.microsoft.com/Files.Read.All",
   "https://graph.microsoft.com/Sites.Read.All",
