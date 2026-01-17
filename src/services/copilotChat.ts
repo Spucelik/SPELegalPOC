@@ -212,62 +212,9 @@ async function searchBasedResponse(
   userMessage: string,
   config: ChatLaunchConfig
 ): Promise<string> {
-  const searchUrl = `${GRAPH_ENDPOINT}/search/query`;
-
-  // Use the container ID as the drive ID to scope search to this specific case
-  // SharePoint Embedded containers ARE Graph drives, so we can filter by driveId
-  const requestBody = {
-    requests: [
-      {
-        entityTypes: ["driveItem"],
-        query: {
-          // Scope to specific container/drive using the container ID
-          queryString: userMessage,
-        },
-        // Restrict search to the specific drive (container)
-        sharePointOneDriveOptions: {
-          includeContent: "privateContent",
-        },
-        // Filter to only this container's drive
-        contentSources: [`/drives/${containerId}`],
-        from: 0,
-        size: 10,
-      },
-    ],
-  };
-
-  try {
-    const searchResponse = await fetch(searchUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(requestBody),
-    });
-
-    if (!searchResponse.ok) {
-      const errorText = await searchResponse.text();
-      console.error("Search failed:", searchResponse.status, errorText);
-      
-      // Try alternative approach: search with drive filter in query
-      return await searchWithDriveFilter(accessToken, containerId, containerName, userMessage);
-    }
-
-    const searchData = await searchResponse.json();
-    const hits = searchData.value?.[0]?.hitsContainers?.[0]?.hits || [];
-
-    if (hits.length === 0) {
-      // Try alternative approach before giving up
-      return await searchWithDriveFilter(accessToken, containerId, containerName, userMessage);
-    }
-
-    // Build response from search results with extracts
-    return formatSearchResults(hits, containerName);
-  } catch (error) {
-    console.error("Search error:", error);
-    return "I'm having trouble accessing the case documents right now. Please try again in a moment.";
-  }
+  // Use drive-specific search endpoint directly for SharePoint Embedded containers
+  // This is more reliable than the /search/query endpoint for container-scoped searches
+  return await searchWithDriveFilter(accessToken, containerId, containerName, userMessage);
 }
 
 /**
@@ -279,20 +226,70 @@ async function searchWithDriveFilter(
   containerName: string,
   userMessage: string
 ): Promise<string> {
-  // Use the drive's search endpoint directly to scope to this container
-  const driveSearchUrl = `${GRAPH_ENDPOINT}/drives/${containerId}/root/search(q='${encodeURIComponent(userMessage)}')`;
+  // Sanitize the query - remove special characters that cause URL issues
+  const sanitizedQuery = userMessage
+    .replace(/[?&=#%]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Use the drive's children endpoint with filter for broader content listing
+  // Then use search endpoint with properly encoded query
+  const driveSearchUrl = `${GRAPH_ENDPOINT}/drives/${containerId}/root/search(q='${encodeURIComponent(sanitizedQuery)}')`;
   
   try {
     const response = await fetch(driveSearchUrl, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
       },
     });
 
     if (!response.ok) {
-      console.error("Drive search failed:", await response.text());
+      console.error("Drive search failed:", response.status);
+      // Fallback: list all files in the container
+      return await listContainerFiles(accessToken, containerId, containerName, userMessage);
+    }
+
+    const data = await response.json();
+    const items = data.value || [];
+
+    if (items.length === 0) {
+      return await listContainerFiles(accessToken, containerId, containerName, userMessage);
+    }
+
+    // Format results from drive search
+    const responses: string[] = items.slice(0, 5).map((item: any) => {
+      const name = item.name || 'Document';
+      const size = item.size ? `(${Math.round(item.size / 1024)} KB)` : '';
+      return `• **${name}** ${size}`;
+    });
+
+    return `Found ${items.length} document(s) in "${containerName}" matching "${sanitizedQuery}":\n\n${responses.join("\n")}\n\nWould you like more details about any of these documents?`;
+  } catch (error) {
+    console.error("Drive search error:", error);
+    return await listContainerFiles(accessToken, containerId, containerName, userMessage);
+  }
+}
+
+/**
+ * Fallback: List files in the container when search fails.
+ */
+async function listContainerFiles(
+  accessToken: string,
+  containerId: string,
+  containerName: string,
+  userMessage: string
+): Promise<string> {
+  try {
+    const listUrl = `${GRAPH_ENDPOINT}/drives/${containerId}/root/children?$top=10`;
+    const response = await fetch(listUrl, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (!response.ok) {
       return getNoResultsMessage(containerName, userMessage);
     }
 
@@ -300,23 +297,13 @@ async function searchWithDriveFilter(
     const items = data.value || [];
 
     if (items.length === 0) {
-      return getNoResultsMessage(containerName, userMessage);
+      return `The "${containerName}" case doesn't have any documents yet. Upload some files to get started!`;
     }
 
-    // Format results from drive search
-    const responses: string[] = items.slice(0, 5).map((item: any) => {
-      const name = item.name || 'Document';
-      const description = item.description || item.webUrl || '';
-      return `**${name}**${description ? `\n${description}` : ''}`;
-    });
-
-    if (responses.length > 0) {
-      return `Found ${items.length} document(s) in the ${containerName} case matching your query:\n\n${responses.join("\n\n")}\n\nWould you like more details about any of these documents?`;
-    }
-
-    return getNoResultsMessage(containerName, userMessage);
+    const fileList = items.slice(0, 5).map((item: any) => `• ${item.name}`).join("\n");
+    return `Here are the documents in "${containerName}":\n\n${fileList}\n\nAsk me about any of these documents, or try a more specific search term.`;
   } catch (error) {
-    console.error("Drive search error:", error);
+    console.error("List files error:", error);
     return getNoResultsMessage(containerName, userMessage);
   }
 }
