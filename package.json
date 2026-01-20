@@ -15,7 +15,6 @@
     "@azure/msal-react": "^3.0.23",
     "@fluentui/react": "^8.125.3",
     "@hookform/resolvers": "^3.10.0",
-    "@microsoft/sharepointembedded-copilotchat-react": "https://download.microsoft.com/download/970802a5-2a7e-44ed-b17d-ad7dc99be312/microsoft-sharepointembedded-copilotchat-react-1.0.9.tgz",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-aspect-ratio": "^1.1.7",
