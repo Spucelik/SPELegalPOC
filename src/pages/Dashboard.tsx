@@ -25,7 +25,7 @@ import FlyoutButtons from "@/components/FlyoutButtons";
 import CaseSummaryPanel from "@/components/panels/CaseSummaryPanel";
 import ToolsPanel from "@/components/panels/ToolsPanel";
 import ReportsPanel from "@/components/panels/ReportsPanel";
-import CopilotChat from "@/components/CopilotChat";
+import CustomCopilotChat from "@/components/CustomCopilotChat";
 
 type PanelType = "caseSummary" | "tools" | "reports";
 
@@ -284,7 +284,7 @@ export default function Dashboard() {
 
         {/* Copilot Chat Bubble */}
         {selectedContainer && (
-          <CopilotChat
+          <CustomCopilotChat
             containerId={selectedContainer.id}
             containerName={selectedContainer.displayName}
           />
