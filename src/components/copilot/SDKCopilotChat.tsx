@@ -3,6 +3,7 @@ import { X, MessageSquare, Loader2, AlertTriangle, RefreshCw } from "lucide-reac
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { CopilotAuthProvider } from "./CopilotAuthProvider";
+import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
 import { ChatEmbedded, ChatEmbeddedAPI, ChatLaunchConfig } from "@microsoft/sharepointembedded-copilotchat-react";
 
 interface SDKCopilotChatProps {
@@ -177,14 +178,16 @@ export default function SDKCopilotChat({
               <p className="text-xs text-muted-foreground mt-1">Connecting to Microsoft services</p>
             </div>
           ) : sdkAvailable ? (
-            <div className="w-full h-full" id="copilot-chat-container">
-              <ChatEmbedded
-                onApiReady={handleApiReady}
-                authProvider={authProvider}
-                containerId={containerId}
-                style={{ width: '100%', height: '100%' }}
-              />
-            </div>
+            <CopilotErrorBoundary onRetry={handleRetry} onClose={onClose}>
+              <div className="w-full h-full" id="copilot-chat-container">
+                <ChatEmbedded
+                  onApiReady={handleApiReady}
+                  authProvider={authProvider}
+                  containerId={containerId}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </div>
+            </CopilotErrorBoundary>
           ) : null}
         </div>
 
