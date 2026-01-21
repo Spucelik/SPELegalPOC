@@ -12,13 +12,13 @@ interface FlyoutButtonsProps {
 export default function FlyoutButtons({ activePanel, onPanelToggle, showCopilot }: FlyoutButtonsProps) {
   const buttons: { id: PanelType; label: string; bgClass: string }[] = [
     { id: "caseSummary", label: "Case Summary", bgClass: "bg-primary hover:bg-primary/90" },
-    { id: "tools", label: "Tools", bgClass: "bg-primary/80 hover:bg-primary/70" },
-    { id: "reports", label: "Reports", bgClass: "bg-primary/60 hover:bg-primary/50" },
     ...(showCopilot ? [{ 
       id: "copilot" as PanelType, 
       label: "AI Assistant", 
-      bgClass: "bg-primary/40 hover:bg-primary/30"
+      bgClass: "bg-primary/80 hover:bg-primary/70"
     }] : []),
+    { id: "tools", label: "Tools", bgClass: "bg-primary/60 hover:bg-primary/50" },
+    { id: "reports", label: "Reports", bgClass: "bg-primary/40 hover:bg-primary/30" },
   ];
 
   return (
