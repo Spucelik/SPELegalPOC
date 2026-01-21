@@ -1,10 +1,19 @@
-import { useMemo, useState, useEffect, useCallback } from "react";
-import { Loader2, AlertTriangle, RefreshCw, ExternalLink } from "lucide-react";
+import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import { Loader2, AlertTriangle, RefreshCw, ExternalLink, Send, Database, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import { CopilotAuthProvider } from "@/components/copilot/CopilotAuthProvider";
 import { CopilotErrorBoundary } from "@/components/copilot/CopilotErrorBoundary";
 import { ChatEmbedded, ChatEmbeddedAPI } from "@microsoft/sharepointembedded-copilotchat-react";
+import { 
+  sendCopilotMessage, 
+  createChatAuthProvider, 
+  CopilotMessage,
+  DEFAULT_CHAT_CONFIG 
+} from "@/services/copilotChat";
 
 interface CopilotPanelProps {
   containerId: string;
@@ -13,7 +22,6 @@ interface CopilotPanelProps {
 
 /**
  * Verify container metadata is accessible before mounting SDK.
- * This helps prevent the internal 'name' undefined error.
  */
 async function verifyContainerMetadata(
   containerId: string,
@@ -29,7 +37,6 @@ async function verifyContainerMetadata(
       return { valid: false, error: "Unable to acquire Graph token" };
     }
 
-    // Fetch container/drive metadata to ensure it's accessible
     const response = await fetch(
       `https://graph.microsoft.com/v1.0/storage/fileStorage/containers/${containerId}`,
       {
@@ -54,20 +61,192 @@ async function verifyContainerMetadata(
   }
 }
 
+/**
+ * Fallback chat component using Graph API when SDK fails
+ */
+function FallbackChat({ containerId, containerName }: CopilotPanelProps) {
+  const { getAccessToken } = useAuth();
+  const [messages, setMessages] = useState<CopilotMessage[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const authProvider = useMemo(() => 
+    createChatAuthProvider(getAccessToken), 
+    [getAccessToken]
+  );
+
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        await authProvider.getToken();
+        setIsConnected(true);
+      } catch {
+        setIsConnected(false);
+      }
+    };
+    testConnection();
+  }, [authProvider]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const handleSendMessage = useCallback(async (text: string) => {
+    if (!text.trim() || isLoading) return;
+
+    const userMessage: CopilotMessage = {
+      role: "user",
+      content: text.trim(),
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    setInputValue("");
+    setIsLoading(true);
+
+    try {
+      const response = await sendCopilotMessage(
+        authProvider,
+        containerId,
+        containerName,
+        text.trim(),
+        messages,
+        DEFAULT_CHAT_CONFIG
+      );
+
+      const assistantMessage: CopilotMessage = {
+        role: "assistant",
+        content: response,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("Chat error:", error);
+      const errorMessage: CopilotMessage = {
+        role: "assistant",
+        content: "I'm sorry, I encountered an error processing your request. Please try again.",
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [authProvider, containerId, containerName, messages, isLoading]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSendMessage(inputValue);
+  };
+
+  const zeroQueryPrompts = DEFAULT_CHAT_CONFIG.zeroQueryPrompts;
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center gap-2 pb-3 border-b border-border mb-3">
+        <Database className="w-4 h-4 text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">{containerName}</span>
+        {isConnected && (
+          <span className="flex items-center gap-1 text-xs text-primary">
+            <CheckCircle2 className="w-3 h-3" />
+            Connected
+          </span>
+        )}
+      </div>
+
+      {/* Messages */}
+      <ScrollArea className="flex-1 pr-2" ref={scrollRef}>
+        {messages.length === 0 ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground text-center">
+              {zeroQueryPrompts?.headerText}
+            </p>
+            <div className="space-y-2">
+              {zeroQueryPrompts?.promptSuggestionList?.map((prompt, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleSendMessage(prompt.suggestionText)}
+                  className="w-full text-left px-3 py-2 text-sm rounded-lg 
+                           bg-muted hover:bg-muted/80 transition-colors
+                           border border-border hover:border-primary/50"
+                >
+                  {prompt.suggestionText}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {messages.map((message, index) => (
+              <div
+                key={index}
+                className={cn(
+                  "flex",
+                  message.role === "user" ? "justify-end" : "justify-start"
+                )}
+              >
+                <div
+                  className={cn(
+                    "max-w-[85%] px-3 py-2 rounded-lg text-sm",
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-foreground"
+                  )}
+                >
+                  <p className="whitespace-pre-wrap">{message.content}</p>
+                </div>
+              </div>
+            ))}
+            {isLoading && (
+              <div className="flex justify-start">
+                <div className="bg-muted px-3 py-2 rounded-lg">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </ScrollArea>
+
+      {/* Input */}
+      <form onSubmit={handleSubmit} className="pt-3 border-t border-border mt-3">
+        <div className="flex gap-2">
+          <Input
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="Ask about this case..."
+            disabled={isLoading}
+            className="flex-1"
+          />
+          <Button type="submit" size="icon" disabled={!inputValue.trim() || isLoading}>
+            <Send className="w-4 h-4" />
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 export default function CopilotPanel({ containerId, containerName }: CopilotPanelProps) {
   const { getAccessToken } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
   const [isContainerVerified, setIsContainerVerified] = useState(false);
-  const [mountKey, setMountKey] = useState(0); // Force remount on retry
+  const [mountKey, setMountKey] = useState(0);
+  const [useFallback, setUseFallback] = useState(false);
+  const [sdkFailed, setSdkFailed] = useState(false);
 
   const authProvider = useMemo(
     () => new CopilotAuthProvider(getAccessToken),
     [getAccessToken]
   );
 
-  // Step 1: Verify container metadata before initializing SDK
   useEffect(() => {
     let cancelled = false;
 
@@ -76,7 +255,6 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
       setError(null);
       setIsContainerVerified(false);
 
-      // Verify container is accessible
       const verification = await verifyContainerMetadata(containerId, getAccessToken);
       if (cancelled) return;
 
@@ -86,7 +264,6 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
         return;
       }
 
-      // Initialize auth provider
       try {
         await authProvider.initialize();
         console.log("CopilotPanel: Auth provider initialized");
@@ -102,16 +279,11 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
 
     const timeout = setTimeout(() => {
       if (isLoading && !isContainerVerified) {
-        setError(
-          "The SharePoint Embedded Copilot chat is not responding.\n\n" +
-          "Possible causes:\n" +
-          "• CopilotEmbeddedChatHosts not configured\n" +
-          "• DiscoverabilityDisabled is true\n" +
-          "• Copilot not enabled for your tenant"
-        );
+        console.log("CopilotPanel: Timeout, switching to fallback");
+        setUseFallback(true);
         setIsLoading(false);
       }
-    }, 20000);
+    }, 15000);
 
     verify();
 
@@ -121,7 +293,6 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
     };
   }, [containerId, authProvider, getAccessToken, mountKey]);
 
-  // Step 2: Open chat when API is ready
   useEffect(() => {
     if (!chatApi) return;
 
@@ -145,7 +316,8 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
         console.log("CopilotPanel: Chat opened successfully");
       } catch (err) {
         console.error("CopilotPanel: Failed to open chat", err);
-        setError("Failed to open chat interface");
+        setSdkFailed(true);
+        setUseFallback(true);
       }
     };
 
@@ -164,8 +336,40 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
     setIsLoading(true);
     setChatApi(null);
     setIsContainerVerified(false);
-    setMountKey(k => k + 1); // Force complete remount of SDK
+    setUseFallback(false);
+    setSdkFailed(false);
+    setMountKey(k => k + 1);
   }, []);
+
+  const handleSdkError = useCallback(() => {
+    console.log("CopilotPanel: SDK error caught, switching to fallback");
+    setSdkFailed(true);
+    setUseFallback(true);
+  }, []);
+
+  const handleSwitchToFallback = useCallback(() => {
+    setUseFallback(true);
+  }, []);
+
+  // Use fallback chat
+  if (useFallback) {
+    return (
+      <div className="flex flex-col h-full">
+        {sdkFailed && (
+          <div className="mb-3 p-2 bg-amber-500/10 rounded-lg text-xs text-amber-700 dark:text-amber-400">
+            <p className="font-medium">Using Graph API fallback</p>
+            <p className="text-muted-foreground mt-1">
+              The native Copilot SDK is unavailable. Using search-based chat instead.
+            </p>
+            <Button variant="link" size="sm" className="h-auto p-0 mt-1" onClick={handleRetry}>
+              Try SDK again
+            </Button>
+          </div>
+        )}
+        <FallbackChat containerId={containerId} containerName={containerName} />
+      </div>
+    );
+  }
 
   if (error) {
     return (
@@ -177,10 +381,15 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
         <p className="text-xs text-muted-foreground whitespace-pre-wrap mb-4 max-w-sm">
           {error}
         </p>
-        <Button variant="outline" size="sm" onClick={handleRetry}>
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Retry
-        </Button>
+        <div className="flex flex-col gap-2 w-full max-w-xs">
+          <Button variant="outline" size="sm" onClick={handleRetry}>
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry SDK
+          </Button>
+          <Button variant="secondary" size="sm" onClick={handleSwitchToFallback}>
+            Use Fallback Chat
+          </Button>
+        </div>
         <a 
           href="https://learn.microsoft.com/en-us/sharepoint/dev/embedded/development/declarative-agent/spe-da-adv"
           target="_blank"
@@ -202,12 +411,20 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
           {isContainerVerified ? "Starting Copilot..." : "Verifying container access..."}
         </p>
         <p className="text-xs text-muted-foreground mt-1">Connecting to Microsoft services</p>
+        <Button 
+          variant="link" 
+          size="sm" 
+          className="mt-4 text-xs"
+          onClick={handleSwitchToFallback}
+        >
+          Skip and use fallback chat
+        </Button>
       </div>
     );
   }
 
   return (
-    <CopilotErrorBoundary onRetry={handleRetry}>
+    <CopilotErrorBoundary onRetry={handleRetry} onClose={handleSdkError}>
       <div key={mountKey} className="w-full h-full min-h-[400px]">
         <ChatEmbedded
           onApiReady={handleApiReady}
