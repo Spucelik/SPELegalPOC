@@ -11,35 +11,97 @@ interface CopilotPanelProps {
   containerName: string;
 }
 
+/**
+ * Verify container metadata is accessible before mounting SDK.
+ * This helps prevent the internal 'name' undefined error.
+ */
+async function verifyContainerMetadata(
+  containerId: string,
+  getAccessToken: (scopes: string[]) => Promise<string | null>
+): Promise<{ valid: boolean; driveId?: string; error?: string }> {
+  try {
+    const token = await getAccessToken([
+      "https://graph.microsoft.com/Files.Read.All",
+      "https://graph.microsoft.com/Sites.Read.All",
+    ]);
+    
+    if (!token) {
+      return { valid: false, error: "Unable to acquire Graph token" };
+    }
+
+    // Fetch container/drive metadata to ensure it's accessible
+    const response = await fetch(
+      `https://graph.microsoft.com/v1.0/storage/fileStorage/containers/${containerId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      return { valid: false, error: `Container not accessible: ${response.status}` };
+    }
+
+    const data = await response.json();
+    console.log("CopilotPanel: Container metadata verified", data.displayName);
+    
+    return { valid: true, driveId: data.id };
+  } catch (err) {
+    console.error("CopilotPanel: Container verification failed", err);
+    return { valid: false, error: "Failed to verify container access" };
+  }
+}
+
 export default function CopilotPanel({ containerId, containerName }: CopilotPanelProps) {
   const { getAccessToken } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
+  const [isContainerVerified, setIsContainerVerified] = useState(false);
+  const [mountKey, setMountKey] = useState(0); // Force remount on retry
 
   const authProvider = useMemo(
     () => new CopilotAuthProvider(getAccessToken),
     [getAccessToken]
   );
 
+  // Step 1: Verify container metadata before initializing SDK
   useEffect(() => {
-    const initAuth = async () => {
+    let cancelled = false;
+
+    const verify = async () => {
       setIsLoading(true);
       setError(null);
+      setIsContainerVerified(false);
 
+      // Verify container is accessible
+      const verification = await verifyContainerMetadata(containerId, getAccessToken);
+      if (cancelled) return;
+
+      if (!verification.valid) {
+        setError(verification.error || "Container verification failed");
+        setIsLoading(false);
+        return;
+      }
+
+      // Initialize auth provider
       try {
         await authProvider.initialize();
         console.log("CopilotPanel: Auth provider initialized");
-        setIsLoading(false);
+        if (cancelled) return;
+        setIsContainerVerified(true);
       } catch (err) {
         console.error("CopilotPanel: Auth initialization failed", err);
+        if (cancelled) return;
         setError("Authentication failed. Please try again.");
         setIsLoading(false);
       }
     };
 
     const timeout = setTimeout(() => {
-      if (isLoading) {
+      if (isLoading && !isContainerVerified) {
         setError(
           "The SharePoint Embedded Copilot chat is not responding.\n\n" +
           "Possible causes:\n" +
@@ -49,13 +111,17 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
         );
         setIsLoading(false);
       }
-    }, 15000);
+    }, 20000);
 
-    initAuth();
+    verify();
 
-    return () => clearTimeout(timeout);
-  }, [containerId, authProvider]);
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [containerId, authProvider, getAccessToken, mountKey]);
 
+  // Step 2: Open chat when API is ready
   useEffect(() => {
     if (!chatApi) return;
 
@@ -97,6 +163,8 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
     setError(null);
     setIsLoading(true);
     setChatApi(null);
+    setIsContainerVerified(false);
+    setMountKey(k => k + 1); // Force complete remount of SDK
   }, []);
 
   if (error) {
@@ -126,11 +194,13 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
     );
   }
 
-  if (isLoading) {
+  if (isLoading || !isContainerVerified) {
     return (
       <div className="flex flex-col items-center justify-center h-full">
         <Loader2 className="w-6 h-6 animate-spin text-primary mb-3" />
-        <p className="text-sm text-muted-foreground">Initializing Copilot...</p>
+        <p className="text-sm text-muted-foreground">
+          {isContainerVerified ? "Starting Copilot..." : "Verifying container access..."}
+        </p>
         <p className="text-xs text-muted-foreground mt-1">Connecting to Microsoft services</p>
       </div>
     );
@@ -138,7 +208,7 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
 
   return (
     <CopilotErrorBoundary onRetry={handleRetry}>
-      <div className="w-full h-full min-h-[400px]">
+      <div key={mountKey} className="w-full h-full min-h-[400px]">
         <ChatEmbedded
           onApiReady={handleApiReady}
           authProvider={authProvider}
