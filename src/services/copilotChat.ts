@@ -4,6 +4,7 @@ import {
   GRAPH_BETA_ENDPOINT,
   COPILOT_SCOPES,
   GRAPH_SEARCH_SCOPES,
+  SHAREPOINT_CONTAINER_SCOPES,
   IChatEmbeddedApiAuthProvider, 
   ChatLaunchConfig 
 } from "@/config/sharepoint";
@@ -69,11 +70,12 @@ function cleanCopilotText(text: string): string {
 }
 
 /**
- * Create auth provider for Copilot chat.
+ * Create auth provider for Copilot chat following the SDK pattern.
+ * Uses SharePoint Container.Selected scope as per Microsoft documentation:
+ * https://learn.microsoft.com/en-us/sharepoint/dev/embedded/development/tutorials/spe-da-vscode
  * 
- * NOTE: The official SharePoint Embedded Copilot SDK requires Container.Selected scope.
- * Since we're using Graph API directly (SDK not available), we use Graph scopes.
- * If the SDK becomes available, switch back to COPILOT_SCOPES.
+ * The scope pattern is: {hostname}/Container.Selected
+ * where hostname is the tenant SharePoint URL (e.g., https://pucelikdemo.sharepoint.com)
  */
 export function createChatAuthProvider(
   getToken: (scopes: string[]) => Promise<string | null>
@@ -81,13 +83,20 @@ export function createChatAuthProvider(
   return {
     hostname: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
     getToken: async () => {
-      // Use Graph scopes since we're calling Graph API endpoints
-      // Container.Selected is only needed for the official SDK component
-      const token = await getToken(GRAPH_SEARCH_SCOPES);
+      // Use SharePoint Container.Selected scope as per SDK documentation
+      // This scope grants access to the SharePoint Embedded container for Copilot
+      const token = await getToken(SHAREPOINT_CONTAINER_SCOPES);
       if (!token) {
-        throw new Error("Failed to acquire token for Copilot chat");
+        // Fallback to Graph scopes if Container.Selected fails
+        console.log("Container.Selected scope failed, trying Graph scopes");
+        const graphToken = await getToken(GRAPH_SEARCH_SCOPES);
+        if (!graphToken) {
+          throw new Error("Failed to acquire token for Copilot chat");
+        }
+        console.log("Acquired Graph token for Copilot chat (fallback)");
+        return graphToken;
       }
-      console.log("Acquired Graph token for Copilot chat");
+      console.log("Acquired SharePoint Container.Selected token for Copilot chat");
       return token;
     },
   };
