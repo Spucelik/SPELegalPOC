@@ -1,18 +1,25 @@
 import { cn } from "@/lib/utils";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, MessageSquare } from "lucide-react";
 
-type PanelType = "caseSummary" | "tools" | "reports";
+export type PanelType = "caseSummary" | "tools" | "reports" | "copilot";
 
 interface FlyoutButtonsProps {
   activePanel: PanelType | null;
   onPanelToggle: (panel: PanelType) => void;
+  showCopilot?: boolean;
 }
 
-export default function FlyoutButtons({ activePanel, onPanelToggle }: FlyoutButtonsProps) {
-  const buttons: { id: PanelType; label: string; bgClass: string }[] = [
+export default function FlyoutButtons({ activePanel, onPanelToggle, showCopilot }: FlyoutButtonsProps) {
+  const buttons: { id: PanelType; label: string; bgClass: string; icon?: React.ReactNode }[] = [
     { id: "caseSummary", label: "Case Summary", bgClass: "bg-primary hover:bg-primary/90" },
     { id: "tools", label: "Tools", bgClass: "bg-primary/80 hover:bg-primary/70" },
     { id: "reports", label: "Reports", bgClass: "bg-primary/60 hover:bg-primary/50" },
+    ...(showCopilot ? [{ 
+      id: "copilot" as PanelType, 
+      label: "AI Assistant", 
+      bgClass: "bg-accent-foreground hover:bg-accent-foreground/90",
+      icon: <MessageSquare className="h-4 w-4" />
+    }] : []),
   ];
 
   return (
@@ -29,12 +36,14 @@ export default function FlyoutButtons({ activePanel, onPanelToggle }: FlyoutButt
           )}
           style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
         >
-          <ChevronLeft 
-            className={cn(
-              "h-4 w-4 transition-transform duration-200",
-              activePanel === button.id ? "rotate-180" : "rotate-0"
-            )} 
-          />
+          {button.icon || (
+            <ChevronLeft 
+              className={cn(
+                "h-4 w-4 transition-transform duration-200",
+                activePanel === button.id ? "rotate-180" : "rotate-0"
+              )} 
+            />
+          )}
           <span className="tracking-wide">{button.label}</span>
         </button>
       ))}

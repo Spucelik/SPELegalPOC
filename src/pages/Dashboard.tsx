@@ -25,9 +25,8 @@ import FlyoutButtons from "@/components/FlyoutButtons";
 import CaseSummaryPanel from "@/components/panels/CaseSummaryPanel";
 import ToolsPanel from "@/components/panels/ToolsPanel";
 import ReportsPanel from "@/components/panels/ReportsPanel";
-import { SDKCopilotChat } from "@/components/copilot";
-
-type PanelType = "caseSummary" | "tools" | "reports";
+import CopilotPanel from "@/components/panels/CopilotPanel";
+import { PanelType } from "@/components/FlyoutButtons";
 
 // Button column width
 const BUTTON_COLUMN_WIDTH = 48;
@@ -46,9 +45,6 @@ export default function Dashboard() {
   const [activePanel, setActivePanel] = useState<PanelType | null>(null);
   const [pinnedPanels, setPinnedPanels] = useState<Set<PanelType>>(new Set());
   const [panelWidth, setPanelWidth] = useState(400);
-  
-  // Copilot chat state
-  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
@@ -248,7 +244,8 @@ export default function Dashboard() {
         {/* Flyout Buttons */}
         <FlyoutButtons 
           activePanel={activePanel} 
-          onPanelToggle={handlePanelToggle} 
+          onPanelToggle={handlePanelToggle}
+          showCopilot={!!selectedContainer}
         />
 
         {/* Flyout Panels */}
@@ -285,24 +282,21 @@ export default function Dashboard() {
           <ReportsPanel />
         </FlyoutPanel>
 
-        {/* Copilot Chat Button */}
+        {/* Copilot Panel */}
         {selectedContainer && (
-          <>
-            <button
-              onClick={() => setIsCopilotOpen(true)}
-              className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full shadow-lg transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground hover:scale-105 active:scale-95"
-              aria-label="Open case assistant"
-            >
-              <Briefcase className="w-6 h-6" />
-            </button>
-            
-            <SDKCopilotChat
+          <FlyoutPanel
+            title="AI Assistant"
+            isOpen={activePanel === "copilot"}
+            onClose={() => handlePanelClose("copilot")}
+            isPinned={pinnedPanels.has("copilot")}
+            onPinToggle={() => handlePinToggle("copilot")}
+            onWidthChange={handlePanelWidthChange}
+          >
+            <CopilotPanel 
               containerId={selectedContainer.id}
               containerName={selectedContainer.displayName}
-              isOpen={isCopilotOpen}
-              onClose={() => setIsCopilotOpen(false)}
             />
-          </>
+          </FlyoutPanel>
         )}
       </div>
     </div>
