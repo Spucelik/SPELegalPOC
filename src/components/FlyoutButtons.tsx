@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { ChevronLeft, MessageSquare } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 export type PanelType = "caseSummary" | "tools" | "reports" | "copilot";
 
@@ -10,15 +10,14 @@ interface FlyoutButtonsProps {
 }
 
 export default function FlyoutButtons({ activePanel, onPanelToggle, showCopilot }: FlyoutButtonsProps) {
-  const buttons: { id: PanelType; label: string; bgClass: string; icon?: React.ReactNode }[] = [
+  const buttons: { id: PanelType; label: string; bgClass: string }[] = [
     { id: "caseSummary", label: "Case Summary", bgClass: "bg-primary hover:bg-primary/90" },
     { id: "tools", label: "Tools", bgClass: "bg-primary/80 hover:bg-primary/70" },
     { id: "reports", label: "Reports", bgClass: "bg-primary/60 hover:bg-primary/50" },
     ...(showCopilot ? [{ 
       id: "copilot" as PanelType, 
       label: "AI Assistant", 
-      bgClass: "bg-accent-foreground hover:bg-accent-foreground/90",
-      icon: <MessageSquare className="h-4 w-4" />
+      bgClass: "bg-primary/40 hover:bg-primary/30"
     }] : []),
   ];
 
@@ -36,14 +35,12 @@ export default function FlyoutButtons({ activePanel, onPanelToggle, showCopilot 
           )}
           style={{ writingMode: "vertical-rl", textOrientation: "mixed" }}
         >
-          {button.icon || (
-            <ChevronLeft 
-              className={cn(
-                "h-4 w-4 transition-transform duration-200",
-                activePanel === button.id ? "rotate-180" : "rotate-0"
-              )} 
-            />
-          )}
+          <ChevronLeft 
+            className={cn(
+              "h-4 w-4 transition-transform duration-200",
+              activePanel === button.id ? "rotate-180" : "rotate-0"
+            )} 
+          />
           <span className="tracking-wide">{button.label}</span>
         </button>
       ))}
