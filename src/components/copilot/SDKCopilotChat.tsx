@@ -1,28 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { X, MessageSquare, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { CopilotAuthProvider } from "./CopilotAuthProvider";
-
-// Import types - the actual SDK component will be imported when available
-// import { ChatEmbedded, ChatEmbeddedAPI } from '@microsoft/sharepointembedded-copilotchat-react';
-
-interface ChatEmbeddedAPI {
-  openChat(config?: ChatLaunchConfig): Promise<void>;
-  close(): void;
-}
-
-interface ChatLaunchConfig {
-  header?: string;
-  zeroQueryPrompts?: {
-    headerText: string;
-    promptSuggestionList: Array<{ suggestionText: string }>;
-  };
-  suggestedPrompts?: string[];
-  instruction?: string;
-  locale?: string;
-}
+import { ChatEmbedded, ChatEmbeddedAPI, ChatLaunchConfig } from "@microsoft/sharepointembedded-copilotchat-react";
 
 interface SDKCopilotChatProps {
   containerId: string;
@@ -59,30 +40,10 @@ export default function SDKCopilotChat({
     [getAccessToken]
   );
 
-  // Check if SDK is available via dynamic import
+  // SDK is now statically imported, mark as available
   useEffect(() => {
-    const checkSDK = async () => {
-      try {
-        // Dynamic import to check if SDK is installed
-        // Using a variable to prevent static analysis from failing
-        const sdkModule = "@microsoft/sharepointembedded-copilotchat-react";
-        const sdk = await import(/* @vite-ignore */ sdkModule);
-        if (sdk.ChatEmbedded) {
-          setSdkAvailable(true);
-          console.log("SDKCopilotChat: SDK is available");
-        }
-      } catch {
-        setSdkAvailable(false);
-        setError(
-          "SharePoint Embedded Copilot SDK is not installed.\n\n" +
-          "To install:\n" +
-          "1. Run: npm install @microsoft/sharepointembedded-copilotchat-react\n" +
-          "2. Push changes via GitHub sync"
-        );
-        setIsLoading(false);
-      }
-    };
-    checkSDK();
+    setSdkAvailable(true);
+    console.log("SDKCopilotChat: SDK is available");
   }, []);
 
   // Initialize auth provider when opened
@@ -217,20 +178,12 @@ export default function SDKCopilotChat({
             </div>
           ) : sdkAvailable ? (
             <div className="w-full h-full" id="copilot-chat-container">
-              {/* 
-                The ChatEmbedded component will render here when SDK is available.
-                Uncomment after installing the SDK:
-                
-                <ChatEmbedded
-                  onApiReady={handleApiReady}
-                  authProvider={authProvider}
-                  containerId={containerId}
-                  style={{ width: '100%', height: '100%' }}
-                />
-              */}
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <p className="text-sm">SDK component placeholder - uncomment ChatEmbedded in code</p>
-              </div>
+              <ChatEmbedded
+                onApiReady={handleApiReady}
+                authProvider={authProvider}
+                containerId={containerId}
+                style={{ width: '100%', height: '100%' }}
+              />
             </div>
           ) : null}
         </div>
