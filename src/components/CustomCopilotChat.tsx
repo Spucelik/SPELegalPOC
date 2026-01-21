@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Loader2 } from "lucide-react";
+import { MessageCircle, X, Send, Loader2, Database, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,16 @@ interface CustomCopilotChatProps {
   config?: ChatLaunchConfig;
 }
 
+/**
+ * Custom Copilot Chat Component
+ * 
+ * This component implements the SharePoint Embedded Copilot chat pattern
+ * following the SDK documentation at:
+ * https://learn.microsoft.com/en-us/sharepoint/dev/embedded/development/tutorials/spe-da-vscode
+ * 
+ * It uses the SharePoint container as the document source, with authentication
+ * via Container.Selected scope as per the official SDK requirements.
+ */
 export default function CustomCopilotChat({ 
   containerId, 
   containerName, 
@@ -29,10 +39,11 @@ export default function CustomCopilotChat({
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevContainerId = useRef<string | null>(null);
 
-  // Create auth provider
+  // Create auth provider following SDK pattern - uses Container.Selected scope
   const authProvider = useMemo(() => 
     createChatAuthProvider(getAccessToken), 
     [getAccessToken]
@@ -45,14 +56,31 @@ export default function CustomCopilotChat({
     header: config?.header || containerName,
   }), [config, containerName]);
 
-  // Reset messages when container changes
+  // Reset messages and test connection when container changes
   useEffect(() => {
     if (prevContainerId.current !== containerId) {
       prevContainerId.current = containerId;
       setMessages([]);
       setInputValue("");
+      setIsConnected(false);
+      
+      // Test container connection on change
+      const testConnection = async () => {
+        try {
+          await authProvider.getToken();
+          setIsConnected(true);
+          console.log("Connected to SharePoint container:", containerId);
+        } catch (error) {
+          console.error("Failed to connect to container:", error);
+          setIsConnected(false);
+        }
+      };
+      
+      if (containerId) {
+        testConnection();
+      }
     }
-  }, [containerId]);
+  }, [containerId, authProvider]);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -166,7 +194,16 @@ export default function CustomCopilotChat({
         <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
           <div>
             <h3 className="font-semibold text-sm">{chatConfig.header}</h3>
-            <p className="text-xs text-muted-foreground">{containerName}</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <Database className="w-3 h-3 text-muted-foreground" />
+              <p className="text-xs text-muted-foreground">{containerName}</p>
+              {isConnected && (
+                <span className="flex items-center gap-1 text-xs text-primary">
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Connected</span>
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

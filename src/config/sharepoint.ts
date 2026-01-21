@@ -41,6 +41,11 @@ export const GRAPH_SEARCH_SCOPES = [
   "https://graph.microsoft.com/Sites.Read.All",
 ];
 
+// SharePoint-specific scopes for container access
+export const SHAREPOINT_CONTAINER_SCOPES = [
+  `${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`,
+];
+
 // Copilot Chat Auth Provider Interface (matches SDK's IChatEmbeddedApiAuthProvider)
 export interface IChatEmbeddedApiAuthProvider {
   hostname: string;
