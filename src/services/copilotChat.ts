@@ -179,8 +179,14 @@ async function callCopilotRetrievalAPI(
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Copilot retrieval API error:", response.status, errorText);
+    // 400/401/403 are expected when beta Copilot API is not enabled for the tenant
+    // Only log as warning, not error, to avoid console noise
+    if (response.status === 400 || response.status === 401 || response.status === 403) {
+      console.warn("Copilot retrieval API not available (expected for tenants without Copilot preview)");
+    } else {
+      const errorText = await response.text();
+      console.error("Copilot retrieval API error:", response.status, errorText);
+    }
     return null;
   }
 
