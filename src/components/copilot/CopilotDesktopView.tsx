@@ -75,13 +75,29 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
     });
   }, [authProvider.hostname]);
   
-  // Handle CSP errors specifically with enhanced detection
+  // Check if error is the known SDK internal error
+  const isSDKInternalError = (errorMessage: string) => {
+    return errorMessage.includes("Cannot read properties of undefined (reading 'name')") ||
+           errorMessage.includes("chatodsp") ||
+           errorMessage.includes("odsp.react.lib");
+  };
+
+  // Handle CSP errors and SDK internal errors with enhanced detection
   useEffect(() => {
-    const handleCSPError = (event: ErrorEvent) => {
+    const handleError = (event: ErrorEvent) => {
       const errorMessage = event.message || event.error?.message || '';
-      console.error('🚨 CSP Error detected:', errorMessage);
       
+      // Check for SDK internal error first
+      if (isSDKInternalError(errorMessage)) {
+        console.error('🚨 SDK internal error detected, switching to fallback:', errorMessage);
+        onError('SDK internal error - switching to fallback');
+        event.preventDefault();
+        return;
+      }
+      
+      // Then check for CSP errors
       if (isCSPError(errorMessage)) {
+        console.error('🚨 CSP Error detected:', errorMessage);
         setCspError(true);
         onError(`SharePoint Content Security Policy Error: ${errorMessage}`);
         event.preventDefault();
@@ -90,19 +106,37 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason?.message || event.reason || '';
-      console.error('🚨 CSP Promise rejection:', reason);
+      const reasonStr = typeof reason === 'string' ? reason : String(reason);
       
-      if (typeof reason === 'string' && isCSPError(reason)) {
+      // Check for SDK internal error first
+      if (isSDKInternalError(reasonStr)) {
+        console.error('🚨 SDK internal error in promise, switching to fallback:', reasonStr);
+        onError('SDK internal error - switching to fallback');
+        event.preventDefault();
+        return;
+      }
+      
+      // Then check for CSP errors
+      if (isCSPError(reasonStr)) {
+        console.error('🚨 CSP Promise rejection:', reasonStr);
         setCspError(true);
-        onError(`SharePoint CSP Rejection: ${reason}`);
+        onError(`SharePoint CSP Rejection: ${reasonStr}`);
         event.preventDefault();
       }
     };
 
-    // Also listen for console errors that might indicate CSP issues
+    // Also listen for console errors that might indicate issues
     const originalConsoleError = console.error;
     console.error = (...args) => {
       const message = args.join(' ');
+      
+      if (isSDKInternalError(message)) {
+        // Don't recurse, just trigger fallback
+        originalConsoleError.apply(console, args);
+        onError('SDK internal error - switching to fallback');
+        return;
+      }
+      
       if (isCSPError(message)) {
         setCspError(true);
         onError(`Console CSP Error: ${message}`);
@@ -110,11 +144,11 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       originalConsoleError.apply(console, args);
     };
 
-    window.addEventListener('error', handleCSPError);
+    window.addEventListener('error', handleError);
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
     
     return () => {
-      window.removeEventListener('error', handleCSPError);
+      window.removeEventListener('error', handleError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       console.error = originalConsoleError;
     };
