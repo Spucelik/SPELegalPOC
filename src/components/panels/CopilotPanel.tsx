@@ -428,6 +428,7 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
         error={error}
         containerId={containerId}
         onError={handleError}
+        onSdkFailed={handleSdkError}
         chatConfig={chatConfig}
         authProvider={authProvider}
         onApiReady={handleApiReady}
