@@ -13,6 +13,7 @@ interface CopilotDesktopViewProps {
   error: string | null;
   containerId: string;
   onError: (errorMessage: string) => void;
+  onSdkFailed?: () => void; // New prop to trigger fallback directly
   chatConfig: ChatLaunchConfig;
   authProvider: IChatEmbeddedApiAuthProvider;
   onApiReady: (api: ChatEmbeddedAPI) => void;
@@ -31,6 +32,7 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
   error,
   containerId,
   onError,
+  onSdkFailed,
   chatConfig,
   authProvider,
   onApiReady,
@@ -90,7 +92,7 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       // Check for SDK internal error first
       if (isSDKInternalError(errorMessage)) {
         console.error('🚨 SDK internal error detected, switching to fallback:', errorMessage);
-        onError('SDK internal error - switching to fallback');
+        onSdkFailed?.(); // Trigger fallback directly
         event.preventDefault();
         return;
       }
@@ -111,7 +113,7 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       // Check for SDK internal error first
       if (isSDKInternalError(reasonStr)) {
         console.error('🚨 SDK internal error in promise, switching to fallback:', reasonStr);
-        onError('SDK internal error - switching to fallback');
+        onSdkFailed?.(); // Trigger fallback directly
         event.preventDefault();
         return;
       }
@@ -133,7 +135,7 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       if (isSDKInternalError(message)) {
         // Don't recurse, just trigger fallback
         originalConsoleError.apply(console, args);
-        onError('SDK internal error - switching to fallback');
+        onSdkFailed?.(); // Trigger fallback directly
         return;
       }
       
@@ -152,7 +154,7 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       console.error = originalConsoleError;
     };
-  }, [onError, isCSPError]);
+  }, [onError, onSdkFailed, isCSPError]);
   
   // Handle API ready with better initialization
   const handleApiReady = useCallback((api: ChatEmbeddedAPI) => {
