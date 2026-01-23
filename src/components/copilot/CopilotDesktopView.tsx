@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, AlertTriangle, ExternalLink, Loader2 } from 'lucide-react';
+import { RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { ChatEmbedded, ChatEmbeddedAPI, IChatEmbeddedApiAuthProvider, ChatLaunchConfig } from '@microsoft/sharepointembedded-copilotchat-react';
 
@@ -13,7 +13,6 @@ interface CopilotDesktopViewProps {
   error: string | null;
   containerId: string;
   onError: (errorMessage: string) => void;
-  onSdkFailed?: () => void; // New prop to trigger fallback directly
   chatConfig: ChatLaunchConfig;
   authProvider: IChatEmbeddedApiAuthProvider;
   onApiReady: (api: ChatEmbeddedAPI) => void;
@@ -32,7 +31,6 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
   error,
   containerId,
   onError,
-  onSdkFailed,
   chatConfig,
   authProvider,
   onApiReady,
@@ -48,13 +46,13 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
   const [debugInfo, setDebugInfo] = useState<{hostname: string, origin: string} | null>(null);
   
   // Enhanced CSP error detection to catch all variations
-  const isCSPError = useCallback((errorMessage: string) => {
+  const isCSPError = (errorMessage: string) => {
     return errorMessage.includes('Content Security Policy') || 
            errorMessage.includes('frame-ancestors') ||
            errorMessage.includes('Refused to frame') ||
            errorMessage.includes('Refused to display') ||
            errorMessage.includes('because an ancestor violates');
-  }, []);
+  };
   
   // Debug initial component state
   useEffect(() => {
@@ -77,29 +75,13 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
     });
   }, [authProvider.hostname]);
   
-  // Check if error is the known SDK internal error
-  const isSDKInternalError = (errorMessage: string) => {
-    return errorMessage.includes("Cannot read properties of undefined (reading 'name')") ||
-           errorMessage.includes("chatodsp") ||
-           errorMessage.includes("odsp.react.lib");
-  };
-
-  // Handle CSP errors and SDK internal errors with enhanced detection
+  // Handle CSP errors specifically with enhanced detection
   useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
+    const handleCSPError = (event: ErrorEvent) => {
       const errorMessage = event.message || event.error?.message || '';
+      console.error('🚨 CSP Error detected:', errorMessage);
       
-      // Check for SDK internal error first
-      if (isSDKInternalError(errorMessage)) {
-        console.error('🚨 SDK internal error detected, switching to fallback:', errorMessage);
-        onSdkFailed?.(); // Trigger fallback directly
-        event.preventDefault();
-        return;
-      }
-      
-      // Then check for CSP errors
       if (isCSPError(errorMessage)) {
-        console.error('🚨 CSP Error detected:', errorMessage);
         setCspError(true);
         onError(`SharePoint Content Security Policy Error: ${errorMessage}`);
         event.preventDefault();
@@ -108,37 +90,19 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason?.message || event.reason || '';
-      const reasonStr = typeof reason === 'string' ? reason : String(reason);
+      console.error('🚨 CSP Promise rejection:', reason);
       
-      // Check for SDK internal error first
-      if (isSDKInternalError(reasonStr)) {
-        console.error('🚨 SDK internal error in promise, switching to fallback:', reasonStr);
-        onSdkFailed?.(); // Trigger fallback directly
-        event.preventDefault();
-        return;
-      }
-      
-      // Then check for CSP errors
-      if (isCSPError(reasonStr)) {
-        console.error('🚨 CSP Promise rejection:', reasonStr);
+      if (typeof reason === 'string' && isCSPError(reason)) {
         setCspError(true);
-        onError(`SharePoint CSP Rejection: ${reasonStr}`);
+        onError(`SharePoint CSP Rejection: ${reason}`);
         event.preventDefault();
       }
     };
 
-    // Also listen for console errors that might indicate issues
+    // Also listen for console errors that might indicate CSP issues
     const originalConsoleError = console.error;
     console.error = (...args) => {
       const message = args.join(' ');
-      
-      if (isSDKInternalError(message)) {
-        // Don't recurse, just trigger fallback
-        originalConsoleError.apply(console, args);
-        onSdkFailed?.(); // Trigger fallback directly
-        return;
-      }
-      
       if (isCSPError(message)) {
         setCspError(true);
         onError(`Console CSP Error: ${message}`);
@@ -146,26 +110,26 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       originalConsoleError.apply(console, args);
     };
 
-    window.addEventListener('error', handleError);
+    window.addEventListener('error', handleCSPError);
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
     
     return () => {
-      window.removeEventListener('error', handleError);
+      window.removeEventListener('error', handleCSPError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       console.error = originalConsoleError;
     };
-  }, [onError, onSdkFailed, isCSPError]);
+  }, [onError]);
   
   // Handle API ready with better initialization
-  const handleApiReady = useCallback((api: ChatEmbeddedAPI) => {
+  const handleApiReady = (api: ChatEmbeddedAPI) => {
     console.log('🚀 Copilot API ready, initializing chat...');
     onApiReady(api);
     setComponentReady(true);
     setCspError(false); // Reset CSP error if API is ready
-  }, [onApiReady]);
+  };
   
   // Debug container contents periodically
-  const debugContainerContents = useCallback(() => {
+  const debugContainerContents = () => {
     if (containerRef.current) {
       const container = containerRef.current;
       console.log('🔍 Container debugging:', {
@@ -200,10 +164,10 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
         });
       });
     }
-  }, []);
+  };
   
   // Open chat following Microsoft documentation pattern
-  const initializeCopilotChat = useCallback(async (api: ChatEmbeddedAPI) => {
+  const initializeCopilotChat = async (api: ChatEmbeddedAPI) => {
     try {
       console.log('📋 Opening copilot chat with config:', {
         header: chatConfig.header,
@@ -283,7 +247,7 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       }
       setComponentReady(false);
     }
-  }, [chatConfig, containerId, authProvider.hostname, debugContainerContents, isCSPError, onError]);
+  };
   
   // Effect to handle chat initialization and reset
   useEffect(() => {
@@ -307,10 +271,10 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       setComponentReady(false);
       setCspError(false);
     }
-  }, [isOpen, chatApi, componentReady, cspError, initializeCopilotChat]);
+  }, [isOpen, chatApi, componentReady, cspError, chatConfig, authProvider.hostname, containerId]);
   
   // Reset chat when requested
-  const handleResetChat = useCallback(() => {
+  const handleResetChat = () => {
     if (onResetChat) {
       console.log('🔄 Resetting copilot chat component');
       chatInitializedRef.current = false;
@@ -318,113 +282,113 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       setCspError(false);
       onResetChat();
     }
-  }, [onResetChat]);
+  };
 
   // Early return if not authenticated - AFTER all hooks
   if (!isAuthenticated) {
     console.log('CopilotDesktopView: Not rendering because not authenticated');
     return null;
   }
-
-  if (!isOpen) return null;
   
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/50">
-        <div>
-          <h3 className="font-semibold text-sm">SharePoint Embedded Copilot</h3>
-          <p className="text-xs text-muted-foreground">
-            Connected to: {siteName || 'SharePoint Site'}
-          </p>
-        </div>
-        {onResetChat && isAuthenticated && (
-          <Button variant="ghost" size="sm" onClick={handleResetChat}>
-            <RefreshCw className="w-4 h-4 mr-2" />
-            Refresh
-          </Button>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-hidden" ref={containerRef}>
-        {cspError ? (
-          <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-            <Alert variant="destructive" className="max-w-md">
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                <p className="font-semibold mb-2">SharePoint Content Security Policy Restriction</p>
-                <p className="text-xs mb-3">
-                  Refused to frame '{debugInfo?.hostname}' because an ancestor violates CSP directive "frame-ancestors"
-                </p>
-                
-                <p className="font-medium text-xs mb-1">What this means:</p>
-                <ul className="text-xs text-left list-disc list-inside mb-3 space-y-1">
-                  <li>SharePoint is configured to only allow framing from specific domains</li>
-                  <li>Your app (origin: {debugInfo?.origin}) is not in the allowed list</li>
-                  <li>This is a SharePoint server-side security feature that cannot be bypassed</li>
-                </ul>
-                
-                <p className="font-medium text-xs mb-1">Required SharePoint Admin Actions:</p>
-                <ul className="text-xs text-left list-disc list-inside mb-3 space-y-1">
-                  <li>Update CSP headers to include: {debugInfo?.origin}</li>
-                  <li>Or configure wildcard domain patterns if applicable</li>
-                  <li>Or use SharePoint's native Copilot interface instead</li>
-                </ul>
-                
-                <div className="bg-muted/50 p-2 rounded text-xs">
-                  <p className="mb-1">Alternative: Access Copilot directly in SharePoint at:</p>
-                  <a 
-                    href={siteUrl || `https://${debugInfo?.hostname}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline inline-flex items-center gap-1"
-                  >
-                    {debugInfo?.hostname}
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </AlertDescription>
-            </Alert>
-            {onResetChat && (
-              <Button variant="outline" size="sm" onClick={handleResetChat} className="mt-4">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Try Again
-              </Button>
-            )}
-          </div>
-        ) : isLoading ? (
-          <div className="flex flex-col items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-            <p className="text-sm text-muted-foreground">Loading...</p>
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-full p-6">
-            <div className="p-4 rounded-full bg-destructive/10 mb-4">
-              <AlertTriangle className="w-8 h-8 text-destructive" />
+    <div className="flex flex-col h-full w-full bg-background">
+      {isOpen && (
+        <>
+          <div className="flex items-center justify-between p-3 border-b border-border bg-muted/30">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold text-foreground">SharePoint Embedded Copilot</span>
+              <span className="text-xs text-muted-foreground">Connected to: {siteName || 'SharePoint Site'}</span>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              {error || "Unable to load the chat. Please try again."}
-            </p>
-            {onResetChat && (
-              <Button variant="outline" size="sm" onClick={handleResetChat}>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Reset Chat
+            {onResetChat && isAuthenticated && (
+              <Button variant="ghost" size="sm" onClick={handleResetChat} className="h-8">
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh
               </Button>
             )}
           </div>
-        ) : (
-          <div className="w-full h-full" id="copilot-chat-container">
-            <ChatEmbedded
-              key={chatKey}
-              onApiReady={handleApiReady}
-              authProvider={authProvider}
-              containerId={containerId}
-              style={{ width: '100%', height: '100%' }}
-            />
+          
+          <div ref={containerRef} className="flex-1 overflow-hidden" data-testid="copilot-chat-wrapper">
+            {cspError ? (
+              <div className="p-4 space-y-4">
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>SharePoint Content Security Policy Restriction</strong>
+                    <p className="mt-2 text-sm">
+                      Refused to frame '{debugInfo?.hostname}' because an ancestor violates CSP directive "frame-ancestors"
+                    </p>
+                    <div className="mt-3">
+                      <strong>What this means:</strong>
+                      <ul className="list-disc ml-4 mt-1 text-sm">
+                        <li>SharePoint is configured to only allow framing from specific domains</li>
+                        <li>Your app (origin: {debugInfo?.origin}) is not in the allowed list</li>
+                        <li>This is a SharePoint server-side security feature that cannot be bypassed</li>
+                      </ul>
+                    </div>
+                    <div className="mt-3">
+                      <strong>Required SharePoint Admin Actions:</strong>
+                      <ul className="list-disc ml-4 mt-1 text-sm">
+                        <li>Update CSP headers to include: {debugInfo?.origin}</li>
+                        <li>Or configure wildcard domain patterns if applicable</li>
+                        <li>Or use SharePoint's native Copilot interface instead</li>
+                      </ul>
+                    </div>
+                    <div className="mt-3 p-2 bg-muted rounded">
+                      <p className="text-sm">
+                        <strong>Alternative:</strong> Access Copilot directly in SharePoint at:
+                        <br />
+                        <a 
+                          href={debugInfo?.hostname} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline inline-flex items-center gap-1"
+                        >
+                          {debugInfo?.hostname} <ExternalLink className="h-3 w-3" />
+                        </a>
+                      </p>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+                {onResetChat && (
+                  <Button variant="outline" onClick={handleResetChat} className="w-full">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Try Again
+                  </Button>
+                )}
+              </div>
+            ) : isLoading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <span className="ml-2 text-muted-foreground">Loading...</span>
+              </div>
+            ) : error ? (
+              <div className="flex flex-col items-center justify-center h-full p-4">
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>
+                    {error || "Unable to load the chat. Please try again."}
+                  </AlertDescription>
+                </Alert>
+                {onResetChat && (
+                  <Button variant="outline" onClick={handleResetChat}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Reset Chat
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="w-full h-full" id="copilot-chat-container">
+                <ChatEmbedded
+                  key={chatKey}
+                  onApiReady={handleApiReady}
+                  authProvider={authProvider}
+                  containerId={containerId}
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 };
