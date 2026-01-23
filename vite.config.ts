@@ -13,13 +13,25 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // Force all React imports to use the same instance
+      "react": path.resolve(__dirname, "./node_modules/react"),
+      "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
     },
     // Deduplicate React to fix "Cannot read properties of null (reading 'useState')"
     // This ensures the SharePoint SDK uses the same React instance as the app
-    dedupe: ["react", "react-dom"],
+    dedupe: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
   },
   optimizeDeps: {
     // Force pre-bundling of these to ensure single instance
-    include: ["react", "react-dom"],
+    include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
+    // Exclude the SDK from optimization to let it use our React
+    exclude: ["@microsoft/sharepointembedded-copilotchat-react"],
+  },
+  build: {
+    commonjsOptions: {
+      // Handle CommonJS modules that might bundle their own React
+      include: [/node_modules/],
+      transformMixedEsModules: true,
+    },
   },
 }));
