@@ -30,6 +30,9 @@ interface DriveItemsResponse {
   value: SharePointFolder[];
 }
 
+// Graph Beta endpoint for container creation
+const GRAPH_BETA_ENDPOINT = "https://graph.microsoft.com/beta";
+
 // Fetch all containers for the configured container type
 export async function fetchContainers(accessToken: string): Promise<SharePointContainer[]> {
   const url = `${GRAPH_ENDPOINT}/storage/fileStorage/containers?$filter=containerTypeId eq ${SHAREPOINT_CONFIG.CONTAINER_TYPE_ID}`;
@@ -49,6 +52,50 @@ export async function fetchContainers(accessToken: string): Promise<SharePointCo
 
   const data: ContainersResponse = await response.json();
   return data.value || [];
+}
+
+// Create a new container (case) using the Graph Beta API
+// Reference: https://learn.microsoft.com/en-us/graph/api/filestoragecontainer-post?view=graph-rest-beta
+export async function createContainer(
+  accessToken: string,
+  displayName: string,
+  description?: string
+): Promise<SharePointContainer> {
+  const url = `${GRAPH_BETA_ENDPOINT}/storage/fileStorage/containers`;
+  
+  const body: {
+    displayName: string;
+    containerTypeId: string;
+    description?: string;
+  } = {
+    displayName,
+    containerTypeId: SHAREPOINT_CONFIG.CONTAINER_TYPE_ID,
+  };
+  
+  if (description) {
+    body.description = description;
+  }
+  
+  console.log("Creating container with:", body);
+  
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error("Failed to create container:", error);
+    throw new Error(`Failed to create container: ${response.status} - ${error}`);
+  }
+
+  const container: SharePointContainer = await response.json();
+  console.log("Container created successfully:", container);
+  return container;
 }
 
 // Fetch root folders for a container (drive)
