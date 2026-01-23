@@ -5,9 +5,10 @@ import Header from "@/components/Header";
 import CaseAccordion from "@/components/CaseAccordion";
 import CaseDetails from "@/components/CaseDetails";
 import { useContainers } from "@/hooks/useContainers";
-import { SharePointContainer } from "@/services/sharepoint";
+import { SharePointContainer, createContainer } from "@/services/sharepoint";
 import { FolderNode } from "@/hooks/useFolders";
 import { Plus, Briefcase, Loader2, AlertCircle } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -59,13 +60,41 @@ export default function Dashboard() {
     }
   }, [containers, selectedContainer]);
 
-  const handleCreateCase = () => {
+  const { getAccessToken } = useAuth();
+  const [isCreating, setIsCreating] = useState(false);
+
+  const handleCreateCase = async () => {
     if (!newCaseName.trim()) return;
-    // TODO: Implement container creation via Graph API
-    console.log("Create case:", newCaseName);
-    setNewCaseName("");
-    setIsCreateDialogOpen(false);
-    refresh();
+    
+    setIsCreating(true);
+    try {
+      // Get access token with FileStorageContainer.Selected scope
+      const token = await getAccessToken([
+        "https://graph.microsoft.com/FileStorageContainer.Selected"
+      ]);
+      
+      if (!token) {
+        throw new Error("Failed to acquire access token");
+      }
+      
+      // Create the container via Graph API
+      const newContainer = await createContainer(token, newCaseName.trim());
+      
+      toast.success(`Case "${newCaseName}" created successfully`);
+      setNewCaseName("");
+      setIsCreateDialogOpen(false);
+      
+      // Refresh the containers list
+      await refresh();
+      
+      // Select the newly created container
+      setSelectedContainer(newContainer);
+    } catch (err) {
+      console.error("Error creating case:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to create case");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   const handleFolderSelect = (folder: FolderNode) => {
@@ -162,15 +191,23 @@ export default function Dashboard() {
                       onChange={(e) => setNewCaseName(e.target.value)}
                       placeholder="e.g., Smith vs Johnson Corp"
                       className="mt-2"
-                      onKeyDown={(e) => e.key === "Enter" && handleCreateCase()}
+                      disabled={isCreating}
+                      onKeyDown={(e) => e.key === "Enter" && !isCreating && handleCreateCase()}
                     />
                   </div>
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                    <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreating}>
                       Cancel
                     </Button>
-                    <Button onClick={handleCreateCase} disabled={!newCaseName.trim()}>
-                      Create Case
+                    <Button onClick={handleCreateCase} disabled={!newCaseName.trim() || isCreating}>
+                      {isCreating ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        "Create Case"
+                      )}
                     </Button>
                   </DialogFooter>
                 </DialogContent>
