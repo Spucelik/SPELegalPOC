@@ -5,15 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { CopilotAuthProvider } from "@/components/copilot/CopilotAuthProvider";
-import { CopilotErrorBoundary } from "@/components/copilot/CopilotErrorBoundary";
-import { ChatEmbedded, ChatEmbeddedAPI } from "@microsoft/sharepointembedded-copilotchat-react";
+import { CopilotAuthProvider, CopilotErrorBoundary, CopilotDesktopView } from "@/components/copilot";
+import { ChatEmbeddedAPI, ChatLaunchConfig } from "@microsoft/sharepointembedded-copilotchat-react";
 import { 
   sendCopilotMessage, 
   createChatAuthProvider, 
   CopilotMessage,
   DEFAULT_CHAT_CONFIG 
 } from "@/services/copilotChat";
+import { SHAREPOINT_CONFIG } from "@/config/sharepoint";
 
 interface CopilotPanelProps {
   containerId: string;
@@ -233,12 +233,12 @@ function FallbackChat({ containerId, containerName }: CopilotPanelProps) {
 }
 
 export default function CopilotPanel({ containerId, containerName }: CopilotPanelProps) {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken, isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
   const [isContainerVerified, setIsContainerVerified] = useState(false);
-  const [mountKey, setMountKey] = useState(0);
+  const [chatKey, setChatKey] = useState(0);
   const [useFallback, setUseFallback] = useState(false);
   const [sdkFailed, setSdkFailed] = useState(false);
 
@@ -246,6 +246,23 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
     () => new CopilotAuthProvider(getAccessToken),
     [getAccessToken]
   );
+
+  // Chat configuration matching the working implementation
+  const chatConfig: ChatLaunchConfig = useMemo(() => ({
+    header: `Case Assistant - ${containerName}`,
+    zeroQueryPrompts: {
+      headerText: "How can I help you with this case?",
+      promptSuggestionList: [
+        { suggestionText: "Summarize the key facts of this case" },
+        { suggestionText: "Who are the parties involved?" },
+        { suggestionText: "What are the important dates?" },
+        { suggestionText: "List the key documents" },
+      ],
+    },
+    instruction:
+      "You are a legal case assistant. Provide clear, professional responses based on the case documents.",
+    locale: "en",
+  }), [containerName]);
 
   useEffect(() => {
     let cancelled = false;
@@ -269,6 +286,7 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
         console.log("CopilotPanel: Auth provider initialized");
         if (cancelled) return;
         setIsContainerVerified(true);
+        setIsLoading(false);
       } catch (err) {
         console.error("CopilotPanel: Auth initialization failed", err);
         if (cancelled) return;
@@ -283,7 +301,7 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
         setUseFallback(true);
         setIsLoading(false);
       }
-    }, 15000);
+    }, 20000);
 
     verify();
 
@@ -291,44 +309,18 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [containerId, authProvider, getAccessToken, mountKey]);
-
-  useEffect(() => {
-    if (!chatApi) return;
-
-    const openChat = async () => {
-      try {
-        await chatApi.openChat({
-          header: `Case Assistant - ${containerName}`,
-          zeroQueryPrompts: {
-            headerText: "How can I help you with this case?",
-            promptSuggestionList: [
-              { suggestionText: "Summarize the key facts of this case" },
-              { suggestionText: "Who are the parties involved?" },
-              { suggestionText: "What are the important dates?" },
-              { suggestionText: "List the key documents" },
-            ],
-          },
-          instruction:
-            "You are a legal case assistant. Provide clear, professional responses based on the case documents.",
-          locale: "en",
-        });
-        console.log("CopilotPanel: Chat opened successfully");
-      } catch (err) {
-        console.error("CopilotPanel: Failed to open chat", err);
-        setSdkFailed(true);
-        setUseFallback(true);
-      }
-    };
-
-    openChat();
-  }, [chatApi, containerName]);
+  }, [containerId, authProvider, getAccessToken, chatKey]);
 
   const handleApiReady = useCallback((api: ChatEmbeddedAPI) => {
     console.log("CopilotPanel: API ready");
     setChatApi(api);
     setIsLoading(false);
     setError(null);
+  }, []);
+
+  const handleError = useCallback((errorMessage: string) => {
+    console.error("CopilotPanel: Error -", errorMessage);
+    setError(errorMessage);
   }, []);
 
   const handleRetry = useCallback(() => {
@@ -338,7 +330,7 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
     setIsContainerVerified(false);
     setUseFallback(false);
     setSdkFailed(false);
-    setMountKey(k => k + 1);
+    setChatKey(k => k + 1);
   }, []);
 
   const handleSdkError = useCallback(() => {
@@ -371,7 +363,7 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
     );
   }
 
-  if (error) {
+  if (error && !isContainerVerified) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center">
         <div className="p-3 rounded-full bg-destructive/10 mb-3">
@@ -423,16 +415,26 @@ export default function CopilotPanel({ containerId, containerName }: CopilotPane
     );
   }
 
+  // Use the new CopilotDesktopView component
   return (
     <CopilotErrorBoundary onRetry={handleRetry} onClose={handleSdkError}>
-      <div key={mountKey} className="w-full h-full min-h-[400px]">
-        <ChatEmbedded
-          onApiReady={handleApiReady}
-          authProvider={authProvider}
-          containerId={containerId}
-          style={{ width: '100%', height: '100%', minHeight: '400px' }}
-        />
-      </div>
+      <CopilotDesktopView
+        isOpen={true}
+        setIsOpen={() => {}}
+        siteName={containerName}
+        siteUrl={null}
+        isLoading={isLoading}
+        error={error}
+        containerId={containerId}
+        onError={handleError}
+        chatConfig={chatConfig}
+        authProvider={authProvider}
+        onApiReady={handleApiReady}
+        chatKey={chatKey}
+        onResetChat={handleRetry}
+        isAuthenticated={isAuthenticated}
+        chatApi={chatApi}
+      />
     </CopilotErrorBoundary>
   );
 }
