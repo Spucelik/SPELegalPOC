@@ -211,23 +211,42 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
             origin: window.location.origin
           });
           
-          // Check if iframe failed to load due to CSP
-          if (iframes.length > 0) {
-            iframes.forEach((iframe, index) => {
-              iframe.addEventListener('error', () => {
-                console.error(`❌ Iframe ${index} failed to load - likely CSP issue`);
-                setCspError(true);
-              });
-              
-              // Also monitor iframe content loading
-              iframe.addEventListener('load', () => {
-                console.log(`✅ Iframe ${index} loaded successfully`);
-                // Debug iframe contents after a delay
-                setTimeout(() => {
-                  debugContainerContents();
-                }, 2000);
-              });
-            });
+              // Check if iframe failed to load due to CSP
+              if (iframes.length > 0) {
+                iframes.forEach((iframe, index) => {
+                  iframe.addEventListener('error', () => {
+                    console.error(`❌ Iframe ${index} failed to load - likely CSP issue`);
+                    setCspError(true);
+                  });
+                  
+                  // Also monitor iframe content loading
+                  iframe.addEventListener('load', () => {
+                    console.log(`✅ Iframe ${index} loaded`);
+                    
+                    // Check if iframe has actual content or is blank (CSP blocked)
+                    try {
+                      // This will throw if cross-origin (which is expected for SharePoint)
+                      const iframeDoc = (iframe as HTMLIFrameElement).contentDocument;
+                      console.log('📄 Iframe document accessible:', !!iframeDoc);
+                    } catch (e) {
+                      // Cross-origin is expected - this means content loaded from SharePoint
+                      console.log('📄 Iframe is cross-origin (expected for SharePoint content)');
+                    }
+                    
+                    // Debug iframe contents after a delay
+                    setTimeout(() => {
+                      debugContainerContents();
+                      
+                      // Check iframe dimensions
+                      const rect = iframe.getBoundingClientRect();
+                      console.log('📐 Iframe dimensions:', {
+                        width: rect.width,
+                        height: rect.height,
+                        visible: rect.width > 0 && rect.height > 0
+                      });
+                    }, 2000);
+                  });
+                });
           }
         }
       }, 2000);
