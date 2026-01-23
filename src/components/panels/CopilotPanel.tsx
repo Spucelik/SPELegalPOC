@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, useRef } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { Loader2, AlertTriangle, RefreshCw, ExternalLink, Send, Database, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -64,7 +64,8 @@ async function verifyContainerMetadata(
 /**
  * Fallback chat component using Graph API when SDK fails
  */
-function FallbackChat({ containerId, containerName }: CopilotPanelProps) {
+const FallbackChat = React.forwardRef<HTMLDivElement, CopilotPanelProps>(
+  function FallbackChat({ containerId, containerName }, ref) {
   const { getAccessToken } = useAuth();
   const [messages, setMessages] = useState<CopilotMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
@@ -230,7 +231,7 @@ function FallbackChat({ containerId, containerName }: CopilotPanelProps) {
       </form>
     </div>
   );
-}
+});
 
 export default function CopilotPanel({ containerId, containerName }: CopilotPanelProps) {
   const { getAccessToken, isAuthenticated } = useAuth();
