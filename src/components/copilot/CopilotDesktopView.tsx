@@ -169,36 +169,72 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
   // Open chat following Microsoft documentation pattern
   const initializeCopilotChat = async (api: ChatEmbeddedAPI) => {
     try {
-      console.log('📋 Opening copilot chat with config:', {
+      console.log('📋 Opening copilot chat with FULL config:', JSON.stringify({
         header: chatConfig.header,
         locale: chatConfig.locale,
+        instruction: chatConfig.instruction?.substring(0, 50) + '...',
+        zeroQueryPrompts: chatConfig.zeroQueryPrompts,
+        chatInputPlaceholder: (chatConfig as any).chatInputPlaceholder,
+      }, null, 2));
+      
+      console.log('📋 Container and Auth details:', {
         containerId: containerId,
-        hasInstruction: !!chatConfig.instruction,
+        containerIdLength: containerId?.length,
+        containerIdPrefix: containerId?.substring(0, 5),
         authHostname: authProvider.hostname,
-        currentOrigin: window.location.origin
+        currentOrigin: window.location.origin,
+        isPublishedUrl: !window.location.hostname.includes('--')
       });
       
       // Wait for component to be fully mounted (following MS docs pattern)
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Use the exact pattern from Microsoft documentation
+      console.log('🎯 Calling api.openChat() now...');
       await api.openChat(chatConfig);
-      console.log('✅ Copilot chat opened successfully');
+      console.log('✅ Copilot chat opened successfully - checking for UI elements...');
+      
+      // Immediately check what the SDK rendered
+      setTimeout(() => {
+        if (containerRef.current) {
+          const allElements = containerRef.current.querySelectorAll('*');
+          const iframes = containerRef.current.querySelectorAll('iframe');
+          console.log('🔍 POST-OPEN UI Analysis:', {
+            totalElements: allElements.length,
+            iframeCount: iframes.length,
+          });
+          
+          // Check iframe dimensions and src
+          iframes.forEach((iframe, i) => {
+            const rect = iframe.getBoundingClientRect();
+            console.log(`🖼️ Iframe ${i}:`, {
+              src: iframe.src?.substring(0, 100),
+              width: rect.width,
+              height: rect.height,
+              display: window.getComputedStyle(iframe).display,
+              visibility: window.getComputedStyle(iframe).visibility,
+            });
+          });
+          
+          // Look for any input/textarea elements that might be the chat input
+          const inputs = containerRef.current.querySelectorAll('input, textarea, [contenteditable]');
+          console.log('⌨️ Input elements found:', inputs.length);
+          inputs.forEach((input, i) => {
+            const rect = input.getBoundingClientRect();
+            console.log(`  Input ${i}:`, {
+              tag: input.tagName,
+              type: (input as HTMLInputElement).type,
+              placeholder: (input as HTMLInputElement).placeholder,
+              visible: rect.width > 0 && rect.height > 0,
+            });
+          });
+        }
+      }, 2000);
       
       // Debug container contents immediately after opening
       setTimeout(() => {
         debugContainerContents();
       }, 1000);
-      
-      // Continue debugging every few seconds to track changes
-      const debugInterval = setInterval(() => {
-        debugContainerContents();
-      }, 3000);
-      
-      // Stop debugging after 15 seconds
-      setTimeout(() => {
-        clearInterval(debugInterval);
-      }, 15000);
       
       // Monitor for CSP errors and UI issues after chat opens
       setTimeout(() => {

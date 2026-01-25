@@ -95,7 +95,17 @@ export function useCopilotSite(rawContainerId: string | null): CopilotSiteState 
         console.log('📦 Container metadata:', {
           id: containerData.id,
           displayName: containerData.displayName,
+          containerTypeId: containerData.containerTypeId,
+          settings: containerData.settings,
+          status: containerData.status,
+          // Log full response for debugging
+          fullResponse: JSON.stringify(containerData, null, 2),
         });
+        
+        // Check if container has the expected structure for Copilot
+        if (!containerData.id) {
+          console.warn('⚠️ Container response missing ID - may indicate configuration issue');
+        }
 
         // Try to get the drive webUrl
         let webUrl: string | null = null;
