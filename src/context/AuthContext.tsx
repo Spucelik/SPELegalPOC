@@ -64,9 +64,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setIsLoggingIn(true);
     try {
-      // Login with empty scopes as per requirements
+      // Use popup with explicit window features to avoid hash_empty_error
       const loginResponse: AuthenticationResult = await msalInstance.loginPopup({
         scopes: [],
+        popupWindowAttributes: {
+          popupSize: {
+            height: 600,
+            width: 480,
+          },
+          popupPosition: {
+            top: window.screenY + (window.outerHeight - 600) / 2,
+            left: window.screenX + (window.outerWidth - 480) / 2,
+          },
+        },
       });
       
       if (loginResponse.account) {
