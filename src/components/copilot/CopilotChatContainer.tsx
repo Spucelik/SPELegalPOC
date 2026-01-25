@@ -2,8 +2,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { useCopilotSite } from '@/hooks/useCopilotSite';
 import { CopilotDesktopView } from '@/components/copilot';
 import { toast } from '@/hooks/use-toast';
-import { SHAREPOINT_CONFIG } from '@/config/sharepoint';
-import { useAuth } from '@/contexts/AuthContext';
+import { APP_CONFIG } from '@/config/appConfig';
+import { useAuth } from '@/context/AuthContext';
 import { 
   IChatEmbeddedApiAuthProvider, 
   ChatEmbeddedAPI, 
@@ -52,8 +52,8 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   const {
     isLoading,
     error,
-    siteUrl,
-    siteName: hookSiteName,
+    webUrl: siteUrl,
+    containerName: hookSiteName,
     sharePointHostname,
   } = useCopilotSite(normalizedContainerId);
   
@@ -61,13 +61,13 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   const siteName = propContainerName || hookSiteName || 'SharePoint Site';
   
   // Ensure we have valid hostnames with proper normalization
-  const rawHostname = sharePointHostname || SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME;
+  const rawHostname = sharePointHostname || APP_CONFIG.sharePointHostname;
   const safeSharePointHostname = normalizeSharePointUrl(rawHostname);
   
   console.log('🏠 SharePoint hostname details:', {
     original: rawHostname,
     normalized: safeSharePointHostname,
-    fromConfig: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
+    fromConfig: APP_CONFIG.sharePointHostname,
     fromHook: sharePointHostname
   });
 

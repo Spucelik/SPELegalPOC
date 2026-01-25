@@ -5,7 +5,7 @@ import {
   AuthenticationResult,
   InteractionRequiredAuthError
 } from "@azure/msal-browser";
-import { MSAL_CONFIG, GRAPH_ENDPOINT } from "@/config/sharepoint";
+import { MSAL_CONFIG, APP_CONFIG, SCOPES } from "@/config/appConfig";
 
 interface AuthContextType {
   isInitialized: boolean;
@@ -14,6 +14,7 @@ interface AuthContextType {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   getAccessToken: (scopes: string[]) => Promise<string | null>;
+  getSharePointToken: () => Promise<string | null>;
   isLoggingIn: boolean;
 }
 
@@ -63,7 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setIsLoggingIn(true);
     try {
-      // Login with no scopes as per requirements
+      // Login with empty scopes as per requirements
       const loginResponse: AuthenticationResult = await msalInstance.loginPopup({
         scopes: [],
       });
@@ -97,6 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * Get access token for specified scopes (typically Graph API)
+   */
   const getAccessToken = useCallback(async (scopes: string[]): Promise<string | null> => {
     if (!user) return null;
 
@@ -121,6 +125,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
+  /**
+   * Get SharePoint-scoped token for Copilot SDK
+   * Uses the {hostname}/Container.Selected scope pattern
+   */
+  const getSharePointToken = useCallback(async (): Promise<string | null> => {
+    return getAccessToken(SCOPES.sharePoint);
+  }, [getAccessToken]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -130,6 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         getAccessToken,
+        getSharePointToken,
         isLoggingIn,
       }}
     >

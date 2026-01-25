@@ -3,7 +3,7 @@ import { X, ExternalLink, Loader2, GripVertical, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 
 function isOfficeFile(file: SharePointFile): boolean {
   const mimeType = file.file?.mimeType || "";

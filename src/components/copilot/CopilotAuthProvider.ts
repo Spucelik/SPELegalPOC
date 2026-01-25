@@ -1,23 +1,28 @@
-import { SHAREPOINT_CONFIG, SHAREPOINT_CONTAINER_SCOPES } from "@/config/sharepoint";
+import { APP_CONFIG, SCOPES } from "@/config/appConfig";
 
 /**
- * Authentication provider for the SharePoint Embedded Copilot SDK.
- * Implements IChatEmbeddedApiAuthProvider interface from the SDK.
- * 
- * Reference: https://learn.microsoft.com/en-us/sharepoint/dev/embedded/development/tutorials/spe-da-vscode
+ * Authentication provider interface for the SharePoint Embedded Copilot SDK.
+ * Matches the SDK's IChatEmbeddedApiAuthProvider interface.
  */
 export interface IChatEmbeddedApiAuthProvider {
   hostname: string;
   getToken(): Promise<string>;
 }
 
+/**
+ * CopilotAuthProvider implements IChatEmbeddedApiAuthProvider for the SDK.
+ * 
+ * The SDK requires:
+ * - hostname: SharePoint site URL (e.g., https://tenant.sharepoint.com)
+ * - getToken(): Returns access token with Container.Selected scope
+ */
 export class CopilotAuthProvider implements IChatEmbeddedApiAuthProvider {
   public readonly hostname: string;
   private getAccessToken: (scopes: string[]) => Promise<string | null>;
   private initialized: boolean = false;
 
   constructor(getAccessToken: (scopes: string[]) => Promise<string | null>) {
-    this.hostname = SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME;
+    this.hostname = APP_CONFIG.sharePointHostname;
     this.getAccessToken = getAccessToken;
   }
 
@@ -36,10 +41,10 @@ export class CopilotAuthProvider implements IChatEmbeddedApiAuthProvider {
 
   /**
    * Get access token with Container.Selected scope.
-   * Required by the SDK: ${hostname}/Container.Selected
+   * Required by the SDK: {hostname}/Container.Selected
    */
   async getToken(): Promise<string> {
-    const token = await this.getAccessToken(SHAREPOINT_CONTAINER_SCOPES);
+    const token = await this.getAccessToken(SCOPES.sharePoint);
     if (!token) {
       throw new Error("Failed to acquire SharePoint Container.Selected token");
     }

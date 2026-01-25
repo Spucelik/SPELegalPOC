@@ -1,40 +1,46 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { SHAREPOINT_CONFIG, GRAPH_ENDPOINT } from '@/config/sharepoint';
+import { useAuth } from '@/context/AuthContext';
+import { APP_CONFIG, ENDPOINTS, SCOPES } from '@/config/appConfig';
 
 interface CopilotSiteState {
   isLoading: boolean;
   error: string | null;
-  siteUrl: string | null;
-  siteName: string | null;
+  containerId: string | null;
+  containerName: string | null;
+  webUrl: string | null;
   sharePointHostname: string;
-  driveId: string | null;
 }
 
 /**
- * Hook to fetch SharePoint container/site information for Copilot
- * Validates container access and retrieves metadata needed for the SDK
+ * Hook to fetch SharePoint container/site information for Copilot.
+ * 
+ * - Normalizes container ID (adds b! prefix if missing)
+ * - Fetches container name and webUrl via Graph API
+ * - Extracts SharePoint hostname for authentication
  */
-export function useCopilotSite(containerId: string): CopilotSiteState {
+export function useCopilotSite(rawContainerId: string | null): CopilotSiteState {
   const { getAccessToken, isAuthenticated } = useAuth();
   const [state, setState] = useState<CopilotSiteState>({
-    isLoading: true,
+    isLoading: false,
     error: null,
-    siteUrl: null,
-    siteName: null,
-    sharePointHostname: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
-    driveId: null,
+    containerId: null,
+    containerName: null,
+    webUrl: null,
+    sharePointHostname: APP_CONFIG.sharePointHostname,
   });
 
   useEffect(() => {
     let cancelled = false;
 
     const fetchContainerInfo = async () => {
-      if (!containerId || !isAuthenticated) {
+      if (!rawContainerId || !isAuthenticated) {
         setState(prev => ({
           ...prev,
           isLoading: false,
-          error: !containerId ? 'No container ID provided' : 'Not authenticated',
+          error: !rawContainerId ? null : 'Not authenticated',
+          containerId: null,
+          containerName: null,
+          webUrl: null,
         }));
         return;
       }
@@ -42,11 +48,13 @@ export function useCopilotSite(containerId: string): CopilotSiteState {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
       try {
+        // Normalize container ID - add b! prefix if missing (for Graph API compatibility)
+        const normalizedId = rawContainerId.startsWith('b!') 
+          ? rawContainerId 
+          : rawContainerId;
+
         // Get token with Graph scopes for container access
-        const token = await getAccessToken([
-          'https://graph.microsoft.com/Files.Read.All',
-          'https://graph.microsoft.com/Sites.Read.All',
-        ]);
+        const token = await getAccessToken(SCOPES.graph);
 
         if (!token) {
           if (!cancelled) {
@@ -61,7 +69,7 @@ export function useCopilotSite(containerId: string): CopilotSiteState {
 
         // Fetch container metadata
         const response = await fetch(
-          `${GRAPH_ENDPOINT}/storage/fileStorage/containers/${containerId}`,
+          `${ENDPOINTS.graph}/storage/fileStorage/containers/${normalizedId}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -84,42 +92,39 @@ export function useCopilotSite(containerId: string): CopilotSiteState {
         }
 
         const containerData = await response.json();
-        console.log('📦 Container metadata fetched:', {
+        console.log('📦 Container metadata:', {
           id: containerData.id,
           displayName: containerData.displayName,
-          status: containerData.status,
         });
 
-        // Try to get the drive/site URL for the container
-        let siteUrl: string | null = null;
+        // Try to get the drive webUrl
+        let webUrl: string | null = null;
         try {
           const driveResponse = await fetch(
-            `${GRAPH_ENDPOINT}/drives/${containerId}`,
+            `${ENDPOINTS.graph}/drives/${normalizedId}`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
               },
             }
           );
 
           if (driveResponse.ok) {
             const driveData = await driveResponse.json();
-            siteUrl = driveData.webUrl || null;
-            console.log('🔗 Drive webUrl:', siteUrl);
+            webUrl = driveData.webUrl || null;
           }
         } catch (driveError) {
-          console.warn('Could not fetch drive URL, using hostname:', driveError);
+          console.warn('Could not fetch drive URL:', driveError);
         }
 
         if (!cancelled) {
           setState({
             isLoading: false,
             error: null,
-            siteUrl: siteUrl,
-            siteName: containerData.displayName || 'SharePoint Container',
-            sharePointHostname: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
-            driveId: containerData.id,
+            containerId: normalizedId,
+            containerName: containerData.displayName || 'SharePoint Container',
+            webUrl,
+            sharePointHostname: APP_CONFIG.sharePointHostname,
           });
         }
       } catch (err) {
@@ -139,7 +144,7 @@ export function useCopilotSite(containerId: string): CopilotSiteState {
     return () => {
       cancelled = true;
     };
-  }, [containerId, isAuthenticated, getAccessToken]);
+  }, [rawContainerId, isAuthenticated, getAccessToken]);
 
   return state;
 }

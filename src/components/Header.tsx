@@ -1,4 +1,4 @@
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { Scale, User, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
