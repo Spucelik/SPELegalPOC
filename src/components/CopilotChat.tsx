@@ -50,12 +50,18 @@ export default function CopilotChat({ containerId, isOpen, onClose }: CopilotCha
     [getAccessToken]
   );
 
-  // Chat launch configuration
+  // Chat launch configuration - must include zeroQueryPrompts for SDK to render UI
   const chatConfig = useMemo<ChatLaunchConfig>(() => ({
     header: containerName || COPILOT_CONFIG.header,
     instruction: COPILOT_CONFIG.instruction,
     locale: COPILOT_CONFIG.locale,
-    suggestedPrompts: COPILOT_CONFIG.suggestedPrompts,
+    zeroQueryPrompts: {
+      headerText: "How can I help you with this case?",
+      promptSuggestionList: COPILOT_CONFIG.suggestedPrompts.map(text => ({ 
+        suggestionText: text 
+      })),
+    },
+    chatInputPlaceholder: COPILOT_CONFIG.chatInputPlaceholder,
   }), [containerName]);
 
   // Reset state when container changes
