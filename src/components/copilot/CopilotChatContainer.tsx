@@ -71,6 +71,20 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
     fromHook: sharePointHostname
   });
 
+  // Check if we're on a preview URL (which won't work with SharePoint SDK due to CSP)
+  const isPreviewUrl = window.location.hostname.includes('--') || 
+                       window.location.hostname.includes('lovableproject.com');
+  
+  // Auto-use fallback for preview URLs since SDK won't work due to CSP
+  useEffect(() => {
+    if (isPreviewUrl && !useFallback) {
+      console.log('📱 Preview URL detected - SharePoint SDK requires published URL for CSP compliance');
+      console.log('🔗 Publish your app and test from the published URL to use the SDK');
+      console.log('🔄 Using Graph API fallback for preview environment');
+      // Don't auto-switch - let the SDK attempt to load so user can see what happens
+    }
+  }, [isPreviewUrl, useFallback]);
+
   // Check if SDK iframe has content after a delay - if not, use fallback
   useEffect(() => {
     if (!isOpen || useFallback || !isAuthenticated) return;
@@ -84,35 +98,34 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
         const rect = iframe.getBoundingClientRect();
         const hasVisibleSize = rect.width > 0 && rect.height > 0;
         
-        // Try to check iframe body content (will fail for cross-origin but that's expected)
-        let hasContent = false;
-        try {
-          const iframeBody = iframe.contentDocument?.body;
-          hasContent = !!(iframeBody && iframeBody.innerHTML.trim().length > 100);
-        } catch {
-          // Cross-origin - assume it might have content if visible
-          hasContent = hasVisibleSize;
-        }
+        console.log('🔍 SDK iframe check:', { 
+          hasVisibleSize, 
+          width: rect.width, 
+          height: rect.height,
+          isPreviewUrl,
+          origin: window.location.origin
+        });
         
-        console.log('🔍 SDK iframe check:', { hasVisibleSize, hasContent, width: rect.width, height: rect.height });
-        
-        // If iframe exists but has no visible content after 8 seconds, use fallback
-        if (!hasContent || rect.height < 50) {
-          console.log('⚠️ SDK iframe appears empty, switching to fallback chat');
+        // Only auto-fallback if iframe is completely broken (height < 10px)
+        // Give SDK more chance to render on published URLs
+        if (rect.height < 10 && isPreviewUrl) {
+          console.log('⚠️ SDK iframe not rendering on preview URL (expected due to CSP)');
+          console.log('💡 To use SharePoint Embedded SDK, publish the app and whitelist the URL');
           setUseFallback(true);
         }
-      } else {
-        // No iframe found after timeout - use fallback
-        console.log('⚠️ No SDK iframe found, switching to fallback chat');
+      } else if (isPreviewUrl) {
+        // No iframe found on preview URL - expected, use fallback
+        console.log('⚠️ No SDK iframe on preview URL - using Graph API fallback');
         setUseFallback(true);
       }
       setSdkCheckComplete(true);
     };
 
-    // Wait 8 seconds for SDK to load, then check
-    const timer = setTimeout(checkIframeContent, 8000);
+    // Wait 12 seconds for SDK to load on published URLs, 5 seconds on preview
+    const timeout = isPreviewUrl ? 5000 : 12000;
+    const timer = setTimeout(checkIframeContent, timeout);
     return () => clearTimeout(timer);
-  }, [isOpen, useFallback, isAuthenticated, chatKey]);
+  }, [isOpen, useFallback, isAuthenticated, chatKey, isPreviewUrl]);
   
   const handleError = useCallback((errorMessage: string) => {
     console.error('Copilot chat error:', errorMessage);
