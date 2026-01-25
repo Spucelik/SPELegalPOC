@@ -144,8 +144,8 @@ export default function FlyoutPanel({
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      {/* Content - allows children to manage their own padding/overflow */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {children}
       </div>
     </div>
