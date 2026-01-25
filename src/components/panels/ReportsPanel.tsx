@@ -22,7 +22,7 @@ export default function ReportsPanel() {
   ];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4 overflow-auto h-full">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
