@@ -9,7 +9,7 @@ import {
 } from "@/services/sharepoint";
 import { FolderNode } from "@/hooks/useFolders";
 import { useFiles } from "@/hooks/useFiles";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { 
   Folder, 
   Home, 

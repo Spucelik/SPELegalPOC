@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, Users, Calendar, Clock, Loader2, ChevronDown, ChevronUp } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { fetchCaseSummary, fetchKeyDates, fetchJurisdiction, fetchCasePersonnel, KeyDate, CasePersonnel } from "@/services/sharepoint";
 
 interface CaseSummaryPanelProps {

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { X, MessageSquare, Loader2, AlertTriangle, RefreshCw } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { CopilotAuthProvider } from "./CopilotAuthProvider";
+import { CopilotAuthProvider } from "@/components/copilot/CopilotAuthProvider";
 import { CopilotErrorBoundary } from "./CopilotErrorBoundary";
 import { ChatEmbedded, ChatEmbeddedAPI, ChatLaunchConfig } from "@microsoft/sharepointembedded-copilotchat-react";
 
