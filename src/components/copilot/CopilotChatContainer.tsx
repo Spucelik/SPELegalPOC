@@ -41,8 +41,10 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   const { getAccessToken, isAuthenticated } = useAuth();
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
   const [chatKey, setChatKey] = useState(0);
-  const [useFallback, setUseFallback] = useState(false);
-  const [sdkCheckComplete, setSdkCheckComplete] = useState(false);
+  // Default to Graph API fallback since SDK isn't rendering despite correct configuration
+  // User can click "Try SDK" to attempt the native experience
+  const [useFallback, setUseFallback] = useState(true);
+  const [sdkCheckComplete, setSdkCheckComplete] = useState(true);
   
   // Validate and normalize containerId
   const normalizedContainerId = containerId && typeof containerId === 'string' 
@@ -282,7 +284,7 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
             onClick={handleResetChat}
             className="text-xs text-primary hover:underline"
           >
-            Try SDK Again
+            Try Native SDK
           </button>
         </div>
         <div className="flex-1 overflow-hidden">
