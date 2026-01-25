@@ -1,36 +1,18 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useCopilotSite } from '@/hooks/useCopilotSite';
-import { CopilotDesktopView } from '@/components/copilot';
+import CopilotDesktopView from './CopilotDesktopView';
 import { toast } from '@/hooks/use-toast';
-import { APP_CONFIG } from '@/config/appConfig';
+import { appConfig } from '@/config/appConfig';
 import { useAuth } from '@/context/AuthContext';
 import { 
   IChatEmbeddedApiAuthProvider, 
   ChatEmbeddedAPI, 
   ChatLaunchConfig 
 } from '@microsoft/sharepointembedded-copilotchat-react';
-import InlineCopilotChat from '@/components/copilot/InlineCopilotChat';
 
 interface CopilotChatContainerProps {
   containerId: string;
   containerName?: string;
-}
-
-/**
- * Normalize SharePoint URL to ensure proper format
- */
-function normalizeSharePointUrl(url: string): string {
-  if (!url) return '';
-  
-  // Remove trailing slashes
-  let normalized = url.replace(/\/+$/, '');
-  
-  // Ensure https:// prefix
-  if (!normalized.startsWith('https://') && !normalized.startsWith('http://')) {
-    normalized = `https://${normalized}`;
-  }
-  
-  return normalized;
 }
 
 const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({ 
@@ -38,18 +20,15 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   containerName: propContainerName 
 }) => {
   const [isOpen, setIsOpen] = useState(true);
-  const { getAccessToken, isAuthenticated } = useAuth();
+  const { getSharePointToken, isAuthenticated } = useAuth();
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
   const [chatKey, setChatKey] = useState(0);
-  // Default to Graph API fallback since SDK isn't rendering despite correct configuration
-  // User can click "Try SDK" to attempt the native experience
-  const [useFallback, setUseFallback] = useState(true);
-  const [sdkCheckComplete, setSdkCheckComplete] = useState(true);
   
   // Validate and normalize containerId
-  const normalizedContainerId = containerId && typeof containerId === 'string' 
-    ? (containerId.startsWith('b!') ? containerId : containerId)
-    : '';
+  const normalizedContainerId = useMemo(() => {
+    if (!containerId || typeof containerId !== 'string') return '';
+    return containerId.startsWith('b!') ? containerId : `b!${containerId}`;
+  }, [containerId]);
   
   const {
     isLoading,
@@ -62,109 +41,42 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   // Use prop name or hook name
   const siteName = propContainerName || hookSiteName || 'SharePoint Site';
   
-  // Ensure we have valid hostnames with proper normalization
-  const rawHostname = sharePointHostname || APP_CONFIG.sharePointHostname;
-  const safeSharePointHostname = normalizeSharePointUrl(rawHostname);
+  // Ensure we have valid hostnames and site names with proper normalization
+  const rawHostname = sharePointHostname || appConfig.sharePointHostname;
+  const safeSharePointHostname = appConfig.normalizeSharePointUrl(rawHostname);
   
   console.log('🏠 SharePoint hostname details:', {
     original: rawHostname,
     normalized: safeSharePointHostname,
-    fromConfig: APP_CONFIG.sharePointHostname,
+    fromConfig: appConfig.sharePointHostname,
     fromHook: sharePointHostname
   });
-
-  // Check if we're on a preview URL (which won't work with SharePoint SDK due to CSP)
-  const isPreviewUrl = window.location.hostname.includes('--') || 
-                       window.location.hostname.includes('lovableproject.com');
-  
-  // Auto-use fallback for preview URLs since SDK won't work due to CSP
-  useEffect(() => {
-    if (isPreviewUrl && !useFallback) {
-      console.log('📱 Preview URL detected - SharePoint SDK requires published URL for CSP compliance');
-      console.log('🔗 Publish your app and test from the published URL to use the SDK');
-      console.log('🔄 Using Graph API fallback for preview environment');
-      // Don't auto-switch - let the SDK attempt to load so user can see what happens
-    }
-  }, [isPreviewUrl, useFallback]);
-
-  // Check if SDK iframe has content after a delay - if not, use fallback
-  useEffect(() => {
-    if (!isOpen || useFallback || !isAuthenticated) return;
-
-    const checkIframeContent = () => {
-      const chatWrapper = document.querySelector('[data-testid="copilot-chat-wrapper"]');
-      const iframe = chatWrapper?.querySelector('iframe') as HTMLIFrameElement | null;
-      
-      if (iframe) {
-        // Check if iframe has visible content
-        const rect = iframe.getBoundingClientRect();
-        const hasVisibleSize = rect.width > 0 && rect.height > 0;
-        
-        console.log('🔍 SDK iframe check:', { 
-          hasVisibleSize, 
-          width: rect.width, 
-          height: rect.height,
-          isPreviewUrl,
-          origin: window.location.origin
-        });
-        
-        // Only auto-fallback if iframe is completely broken (height < 10px)
-        // Give SDK more chance to render on published URLs
-        if (rect.height < 10 && isPreviewUrl) {
-          console.log('⚠️ SDK iframe not rendering on preview URL (expected due to CSP)');
-          console.log('💡 To use SharePoint Embedded SDK, publish the app and whitelist the URL');
-          setUseFallback(true);
-        }
-      } else if (isPreviewUrl) {
-        // No iframe found on preview URL - expected, use fallback
-        console.log('⚠️ No SDK iframe on preview URL - using Graph API fallback');
-        setUseFallback(true);
-      }
-      setSdkCheckComplete(true);
-    };
-
-    // Wait 12 seconds for SDK to load on published URLs, 5 seconds on preview
-    const timeout = isPreviewUrl ? 5000 : 12000;
-    const timer = setTimeout(checkIframeContent, timeout);
-    return () => clearTimeout(timer);
-  }, [isOpen, useFallback, isAuthenticated, chatKey, isPreviewUrl]);
   
   const handleError = useCallback((errorMessage: string) => {
     console.error('Copilot chat error:', errorMessage);
     
-    // Check for CSP or SDK errors that indicate we should use fallback
-    const shouldUseFallback = 
-      errorMessage.includes('Content Security Policy') ||
-      errorMessage.includes('frame-ancestors') ||
-      errorMessage.includes('CSP') ||
-      errorMessage.includes('Cannot read properties of undefined');
-    
-    if (shouldUseFallback) {
-      console.log('🔄 Switching to fallback chat due to SDK error');
-      setUseFallback(true);
-      return;
-    }
-    
     // Add delay to allow auto-recovery mechanism to work first
+    // This prevents showing error notifications when the chat recovers automatically
     setTimeout(() => {
+      // Check if chat has recovered by looking for successful iframe loading
       const chatContainer = document.querySelector('[data-testid="copilot-chat-wrapper"]');
       const hasIframe = chatContainer?.querySelector('iframe');
       
       if (!hasIframe) {
         toast({
           title: "Copilot error",
-          description: `${errorMessage} Switching to alternative chat.`,
+          description: `${errorMessage} The system will attempt to recover automatically.`,
           variant: "destructive",
         });
-        setUseFallback(true);
       } else {
         console.log('🔄 Copilot chat recovered automatically, skipping error notification');
       }
-    }, 2000);
+    }, 2000); // 2 second delay to allow auto-recovery
   }, []);
   
   // Create auth provider for Copilot chat with enhanced URL handling
-  const authProvider = React.useMemo((): IChatEmbeddedApiAuthProvider => {
+  const authProvider = useMemo((): IChatEmbeddedApiAuthProvider => {
+    // Use the actual container webUrl as the siteUrl for the SDK
     const containerWebUrl = siteUrl || safeSharePointHostname;
     
     console.log('🔧 Creating auth provider with URLs:', {
@@ -185,10 +97,8 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
           
           console.log('🔑 Getting SharePoint token for hostname:', safeSharePointHostname);
           
-          // Use Container.Selected scope as required by SDK
-          const scope = `${safeSharePointHostname}/Container.Selected`;
-          const token = await getAccessToken([scope]);
-          
+          // getSharePointToken uses the configured scopes from appConfig
+          const token = await getSharePointToken();
           console.log('🔑 SharePoint auth token retrieved:', token ? 'successfully' : 'failed');
           
           if (!token) {
@@ -205,35 +115,29 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
       }
     };
 
-    // The SDK may require siteUrl to be available on the auth provider
+    // The SDK requires siteUrl to be available on the auth provider
+    // Use the container's actual webUrl to ensure proper site context
     (provider as any).siteUrl = containerWebUrl;
     
     console.log('🔧 Auth provider created with siteUrl:', (provider as any).siteUrl);
     
     return provider;
-  }, [safeSharePointHostname, siteUrl, getAccessToken, handleError, isAuthenticated]);
+  }, [safeSharePointHostname, siteUrl, getSharePointToken, handleError, isAuthenticated]);
   
   // Create chat configuration following Microsoft documentation
-  const chatConfig = React.useMemo((): ChatLaunchConfig => {
+  const chatConfig = useMemo((): ChatLaunchConfig => {
     const config: ChatLaunchConfig = {
-      header: `Case Assistant - ${siteName}`,
-      instruction: "You are a legal case assistant. Provide clear, professional responses based on the case documents. Help users find information, summarize documents, and answer questions about the case files.",
+      header: `Copilot Chat - ${siteName}`,
+      instruction: "You are a helpful AI assistant. Help users find information, answer questions, and work with their SharePoint files and documents.",
       locale: "en",
-      zeroQueryPrompts: {
-        headerText: "How can I help you with this case?",
-        promptSuggestionList: [
-          { suggestionText: "Summarize the key facts of this case" },
-          { suggestionText: "Who are the parties involved?" },
-          { suggestionText: "What are the important dates?" },
-          { suggestionText: "List the key documents" },
-        ],
-      },
+      suggestedPrompts: ["What are my files?", "Help me find documents", "Show me recent changes"]
     };
     
     console.log('📋 Created chat config:', {
       header: config.header,
       hasInstruction: !!config.instruction,
       locale: config.locale,
+      suggestedPrompts: config.suggestedPrompts
     });
     
     return config;
@@ -244,8 +148,6 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
     console.log('🔄 Resetting Copilot chat container');
     setChatKey(prev => prev + 1);
     setChatApi(null);
-    setUseFallback(false);
-    setSdkCheckComplete(false);
     setIsOpen(false);
     setTimeout(() => {
       setIsOpen(true);
@@ -268,34 +170,6 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   if (!normalizedContainerId) {
     console.error('CopilotChatContainer: Invalid containerId provided:', containerId);
     return null;
-  }
-
-  // Use fallback chat if SDK fails
-  if (useFallback) {
-    console.log('📱 Rendering fallback CustomCopilotChat');
-    return (
-      <div className="h-full w-full flex flex-col">
-        <div className="flex items-center justify-between p-3 border-b border-border bg-muted/30">
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold text-foreground">Case Assistant</span>
-            <span className="text-xs text-muted-foreground">{siteName}</span>
-          </div>
-          <button
-            onClick={handleResetChat}
-            className="text-xs text-primary hover:underline"
-          >
-            Try Native SDK
-          </button>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <InlineCopilotChat
-            containerId={normalizedContainerId}
-            containerName={siteName}
-            config={chatConfig}
-          />
-        </div>
-      </div>
-    );
   }
 
   return (
