@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useCopilotSite } from '@/hooks/useCopilotSite';
 import { CopilotDesktopView } from '@/components/copilot';
 import { toast } from '@/hooks/use-toast';
@@ -9,6 +9,7 @@ import {
   ChatEmbeddedAPI, 
   ChatLaunchConfig 
 } from '@microsoft/sharepointembedded-copilotchat-react';
+import InlineCopilotChat from '@/components/copilot/InlineCopilotChat';
 
 interface CopilotChatContainerProps {
   containerId: string;
@@ -40,6 +41,8 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   const { getAccessToken, isAuthenticated } = useAuth();
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
   const [chatKey, setChatKey] = useState(0);
+  const [useFallback, setUseFallback] = useState(false);
+  const [sdkCheckComplete, setSdkCheckComplete] = useState(false);
   
   // Validate and normalize containerId
   const normalizedContainerId = containerId && typeof containerId === 'string' 
@@ -67,22 +70,78 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
     fromConfig: SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME,
     fromHook: sharePointHostname
   });
+
+  // Check if SDK iframe has content after a delay - if not, use fallback
+  useEffect(() => {
+    if (!isOpen || useFallback || !isAuthenticated) return;
+
+    const checkIframeContent = () => {
+      const chatWrapper = document.querySelector('[data-testid="copilot-chat-wrapper"]');
+      const iframe = chatWrapper?.querySelector('iframe') as HTMLIFrameElement | null;
+      
+      if (iframe) {
+        // Check if iframe has visible content
+        const rect = iframe.getBoundingClientRect();
+        const hasVisibleSize = rect.width > 0 && rect.height > 0;
+        
+        // Try to check iframe body content (will fail for cross-origin but that's expected)
+        let hasContent = false;
+        try {
+          const iframeBody = iframe.contentDocument?.body;
+          hasContent = !!(iframeBody && iframeBody.innerHTML.trim().length > 100);
+        } catch {
+          // Cross-origin - assume it might have content if visible
+          hasContent = hasVisibleSize;
+        }
+        
+        console.log('🔍 SDK iframe check:', { hasVisibleSize, hasContent, width: rect.width, height: rect.height });
+        
+        // If iframe exists but has no visible content after 8 seconds, use fallback
+        if (!hasContent || rect.height < 50) {
+          console.log('⚠️ SDK iframe appears empty, switching to fallback chat');
+          setUseFallback(true);
+        }
+      } else {
+        // No iframe found after timeout - use fallback
+        console.log('⚠️ No SDK iframe found, switching to fallback chat');
+        setUseFallback(true);
+      }
+      setSdkCheckComplete(true);
+    };
+
+    // Wait 8 seconds for SDK to load, then check
+    const timer = setTimeout(checkIframeContent, 8000);
+    return () => clearTimeout(timer);
+  }, [isOpen, useFallback, isAuthenticated, chatKey]);
   
   const handleError = useCallback((errorMessage: string) => {
     console.error('Copilot chat error:', errorMessage);
     
+    // Check for CSP or SDK errors that indicate we should use fallback
+    const shouldUseFallback = 
+      errorMessage.includes('Content Security Policy') ||
+      errorMessage.includes('frame-ancestors') ||
+      errorMessage.includes('CSP') ||
+      errorMessage.includes('Cannot read properties of undefined');
+    
+    if (shouldUseFallback) {
+      console.log('🔄 Switching to fallback chat due to SDK error');
+      setUseFallback(true);
+      return;
+    }
+    
     // Add delay to allow auto-recovery mechanism to work first
     setTimeout(() => {
-      // Check if chat has recovered by looking for successful iframe loading
       const chatContainer = document.querySelector('[data-testid="copilot-chat-wrapper"]');
       const hasIframe = chatContainer?.querySelector('iframe');
       
       if (!hasIframe) {
         toast({
           title: "Copilot error",
-          description: `${errorMessage} The system will attempt to recover automatically.`,
+          description: `${errorMessage} Switching to alternative chat.`,
           variant: "destructive",
         });
+        setUseFallback(true);
       } else {
         console.log('🔄 Copilot chat recovered automatically, skipping error notification');
       }
@@ -170,6 +229,8 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
     console.log('🔄 Resetting Copilot chat container');
     setChatKey(prev => prev + 1);
     setChatApi(null);
+    setUseFallback(false);
+    setSdkCheckComplete(false);
     setIsOpen(false);
     setTimeout(() => {
       setIsOpen(true);
@@ -192,6 +253,34 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   if (!normalizedContainerId) {
     console.error('CopilotChatContainer: Invalid containerId provided:', containerId);
     return null;
+  }
+
+  // Use fallback chat if SDK fails
+  if (useFallback) {
+    console.log('📱 Rendering fallback CustomCopilotChat');
+    return (
+      <div className="h-full w-full flex flex-col">
+        <div className="flex items-center justify-between p-3 border-b border-border bg-muted/30">
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold text-foreground">Case Assistant</span>
+            <span className="text-xs text-muted-foreground">{siteName}</span>
+          </div>
+          <button
+            onClick={handleResetChat}
+            className="text-xs text-primary hover:underline"
+          >
+            Try SDK Again
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <InlineCopilotChat
+            containerId={normalizedContainerId}
+            containerName={siteName}
+            config={chatConfig}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (

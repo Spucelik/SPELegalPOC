@@ -57,7 +57,7 @@ export interface ChatLaunchConfig {
   header?: string;
   zeroQueryPrompts?: {
     headerText: string;
-    promptSuggestionList: Array<{
+    promptSuggestionList?: Array<{
       suggestionText: string;
     }>;
   };
