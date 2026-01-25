@@ -1,7 +1,19 @@
 // SharePoint Embedded & Azure AD Configuration
 // Central configuration file for the Copilot Chat implementation
 
-export const APP_CONFIG = {
+// Helper to normalize SharePoint URLs (ensure https:// prefix)
+const normalizeSharePointUrl = (url: string): string => {
+  if (!url) return '';
+  // Remove trailing slashes
+  let normalized = url.replace(/\/+$/, '');
+  // Ensure https:// prefix
+  if (!normalized.startsWith('https://') && !normalized.startsWith('http://')) {
+    normalized = `https://${normalized}`;
+  }
+  return normalized;
+};
+
+export const appConfig = {
   // Azure AD App Registration
   clientId: "50cbacb0-e16f-4f63-a678-01359bfac87b",
   tenantId: "fc14a141-120b-4368-b125-571da82b7865",
@@ -9,7 +21,13 @@ export const APP_CONFIG = {
   // SharePoint Embedded
   containerTypeId: "9162b1be-e7db-4b0d-bc1a-331df4dea97e",
   sharePointHostname: "https://pucelikdemo.sharepoint.com",
-} as const;
+  
+  // Utility function for URL normalization
+  normalizeSharePointUrl,
+};
+
+// Keep APP_CONFIG as alias for backward compatibility
+export const APP_CONFIG = appConfig;
 
 // MSAL Configuration
 export const MSAL_CONFIG = {
