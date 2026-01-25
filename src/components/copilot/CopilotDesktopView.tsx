@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -46,13 +46,13 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
   const [debugInfo, setDebugInfo] = useState<{hostname: string, origin: string} | null>(null);
   
   // Enhanced CSP error detection to catch all variations
-  const isCSPError = (errorMessage: string) => {
+  const isCSPError = useCallback((errorMessage: string) => {
     return errorMessage.includes('Content Security Policy') || 
            errorMessage.includes('frame-ancestors') ||
            errorMessage.includes('Refused to frame') ||
            errorMessage.includes('Refused to display') ||
            errorMessage.includes('because an ancestor violates');
-  };
+  }, []);
   
   // Debug initial component state
   useEffect(() => {
@@ -118,18 +118,10 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
       console.error = originalConsoleError;
     };
-  }, [onError]);
-  
-  // Handle API ready with better initialization
-  const handleApiReady = (api: ChatEmbeddedAPI) => {
-    console.log('🚀 Copilot API ready, initializing chat...');
-    onApiReady(api);
-    setComponentReady(true);
-    setCspError(false); // Reset CSP error if API is ready
-  };
+  }, [onError, isCSPError]);
   
   // Debug container contents periodically
-  const debugContainerContents = () => {
+  const debugContainerContents = useCallback(() => {
     if (containerRef.current) {
       const container = containerRef.current;
       console.log('🔍 Container debugging:', {
@@ -164,77 +156,49 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
         });
       });
     }
-  };
+  }, []);
+  
+  // Handle API ready with better initialization
+  const handleApiReady = useCallback((api: ChatEmbeddedAPI) => {
+    console.log('🚀 Copilot API ready, initializing chat...');
+    onApiReady(api);
+    setComponentReady(true);
+    setCspError(false); // Reset CSP error if API is ready
+  }, [onApiReady]);
   
   // Open chat following Microsoft documentation pattern
-  const initializeCopilotChat = async (api: ChatEmbeddedAPI) => {
+  const initializeCopilotChat = useCallback(async (api: ChatEmbeddedAPI) => {
     try {
-      console.log('📋 Opening copilot chat with FULL config:', JSON.stringify({
+      console.log('📋 Opening copilot chat with config:', {
         header: chatConfig.header,
         locale: chatConfig.locale,
-        instruction: chatConfig.instruction?.substring(0, 50) + '...',
-        zeroQueryPrompts: chatConfig.zeroQueryPrompts,
-        chatInputPlaceholder: (chatConfig as any).chatInputPlaceholder,
-      }, null, 2));
-      
-      console.log('📋 Container and Auth details:', {
         containerId: containerId,
-        containerIdLength: containerId?.length,
-        containerIdPrefix: containerId?.substring(0, 5),
+        hasInstruction: !!chatConfig.instruction,
         authHostname: authProvider.hostname,
-        currentOrigin: window.location.origin,
-        isPublishedUrl: !window.location.hostname.includes('--')
+        currentOrigin: window.location.origin
       });
       
       // Wait for component to be fully mounted (following MS docs pattern)
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // Use the exact pattern from Microsoft documentation
-      console.log('🎯 Calling api.openChat() now...');
       await api.openChat(chatConfig);
-      console.log('✅ Copilot chat opened successfully - checking for UI elements...');
-      
-      // Immediately check what the SDK rendered
-      setTimeout(() => {
-        if (containerRef.current) {
-          const allElements = containerRef.current.querySelectorAll('*');
-          const iframes = containerRef.current.querySelectorAll('iframe');
-          console.log('🔍 POST-OPEN UI Analysis:', {
-            totalElements: allElements.length,
-            iframeCount: iframes.length,
-          });
-          
-          // Check iframe dimensions and src
-          iframes.forEach((iframe, i) => {
-            const rect = iframe.getBoundingClientRect();
-            console.log(`🖼️ Iframe ${i}:`, {
-              src: iframe.src?.substring(0, 100),
-              width: rect.width,
-              height: rect.height,
-              display: window.getComputedStyle(iframe).display,
-              visibility: window.getComputedStyle(iframe).visibility,
-            });
-          });
-          
-          // Look for any input/textarea elements that might be the chat input
-          const inputs = containerRef.current.querySelectorAll('input, textarea, [contenteditable]');
-          console.log('⌨️ Input elements found:', inputs.length);
-          inputs.forEach((input, i) => {
-            const rect = input.getBoundingClientRect();
-            console.log(`  Input ${i}:`, {
-              tag: input.tagName,
-              type: (input as HTMLInputElement).type,
-              placeholder: (input as HTMLInputElement).placeholder,
-              visible: rect.width > 0 && rect.height > 0,
-            });
-          });
-        }
-      }, 2000);
+      console.log('✅ Copilot chat opened successfully');
       
       // Debug container contents immediately after opening
       setTimeout(() => {
         debugContainerContents();
       }, 1000);
+      
+      // Continue debugging every few seconds to track changes
+      const debugInterval = setInterval(() => {
+        debugContainerContents();
+      }, 3000);
+      
+      // Stop debugging after 15 seconds
+      setTimeout(() => {
+        clearInterval(debugInterval);
+      }, 15000);
       
       // Monitor for CSP errors and UI issues after chat opens
       setTimeout(() => {
@@ -247,42 +211,23 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
             origin: window.location.origin
           });
           
-              // Check if iframe failed to load due to CSP
-              if (iframes.length > 0) {
-                iframes.forEach((iframe, index) => {
-                  iframe.addEventListener('error', () => {
-                    console.error(`❌ Iframe ${index} failed to load - likely CSP issue`);
-                    setCspError(true);
-                  });
-                  
-                  // Also monitor iframe content loading
-                  iframe.addEventListener('load', () => {
-                    console.log(`✅ Iframe ${index} loaded`);
-                    
-                    // Check if iframe has actual content or is blank (CSP blocked)
-                    try {
-                      // This will throw if cross-origin (which is expected for SharePoint)
-                      const iframeDoc = (iframe as HTMLIFrameElement).contentDocument;
-                      console.log('📄 Iframe document accessible:', !!iframeDoc);
-                    } catch (e) {
-                      // Cross-origin is expected - this means content loaded from SharePoint
-                      console.log('📄 Iframe is cross-origin (expected for SharePoint content)');
-                    }
-                    
-                    // Debug iframe contents after a delay
-                    setTimeout(() => {
-                      debugContainerContents();
-                      
-                      // Check iframe dimensions
-                      const rect = iframe.getBoundingClientRect();
-                      console.log('📐 Iframe dimensions:', {
-                        width: rect.width,
-                        height: rect.height,
-                        visible: rect.width > 0 && rect.height > 0
-                      });
-                    }, 2000);
-                  });
-                });
+          // Check if iframe failed to load due to CSP
+          if (iframes.length > 0) {
+            iframes.forEach((iframe, index) => {
+              iframe.addEventListener('error', () => {
+                console.error(`❌ Iframe ${index} failed to load - likely CSP issue`);
+                setCspError(true);
+              });
+              
+              // Also monitor iframe content loading
+              iframe.addEventListener('load', () => {
+                console.log(`✅ Iframe ${index} loaded successfully`);
+                // Debug iframe contents after a delay
+                setTimeout(() => {
+                  debugContainerContents();
+                }, 2000);
+              });
+            });
           }
         }
       }, 2000);
@@ -302,7 +247,7 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       }
       setComponentReady(false);
     }
-  };
+  }, [chatConfig, containerId, authProvider.hostname, debugContainerContents, isCSPError, onError]);
   
   // Effect to handle chat initialization and reset
   useEffect(() => {
@@ -326,10 +271,10 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       setComponentReady(false);
       setCspError(false);
     }
-  }, [isOpen, chatApi, componentReady, cspError, chatConfig, authProvider.hostname, containerId]);
+  }, [isOpen, chatApi, componentReady, cspError, initializeCopilotChat]);
   
   // Reset chat when requested
-  const handleResetChat = () => {
+  const handleResetChat = useCallback(() => {
     if (onResetChat) {
       console.log('🔄 Resetting copilot chat component');
       chatInitializedRef.current = false;
@@ -337,8 +282,8 @@ const CopilotDesktopView: React.FC<CopilotDesktopViewProps> = ({
       setCspError(false);
       onResetChat();
     }
-  };
-
+  }, [onResetChat]);
+  
   // Early return if not authenticated - AFTER all hooks
   if (!isAuthenticated) {
     console.log('CopilotDesktopView: Not rendering because not authenticated');
