@@ -2,9 +2,9 @@
 // Update these values with your actual Azure AD and SharePoint Embedded settings
 
 export const SHAREPOINT_CONFIG = {
-  CLIENT_ID: "50cbacb0-e16f-4f63-a678-01359bfac87b",
+  CLIENT_ID: "f9aebe44-3b50-48b5-832b-56292b9bd493",
   TENANT_ID: "fc14a141-120b-4368-b125-571da82b7865",
-  CONTAINER_TYPE_ID: "9162b1be-e7db-4b0d-bc1a-331df4dea97e",
+  CONTAINER_TYPE_ID: "19384b86-b14f-4710-b29f-83737f2ec7d8",
   // SharePoint hostname for Copilot API authentication (must include https://)
   // Use tenant name format: https://{tenant}.sharepoint.com
   SHAREPOINT_HOSTNAME: "https://pucelikdemo.sharepoint.com",
@@ -30,9 +30,7 @@ export const GRAPH_BETA_ENDPOINT = "https://graph.microsoft.com/beta";
 
 // Scopes for Copilot - using SharePoint Container.Selected as per SDK documentation
 // The SDK requires this scope pattern: {hostname}/Container.Selected
-export const COPILOT_SCOPES = [
-  `${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`,
-];
+export const COPILOT_SCOPES = [`${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`];
 
 // Graph API scopes for search-based Copilot functionality
 // Used when calling Graph API endpoints directly (current implementation)
@@ -42,9 +40,7 @@ export const GRAPH_SEARCH_SCOPES = [
 ];
 
 // SharePoint-specific scopes for container access
-export const SHAREPOINT_CONTAINER_SCOPES = [
-  `${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`,
-];
+export const SHAREPOINT_CONTAINER_SCOPES = [`${SHAREPOINT_CONFIG.SHAREPOINT_HOSTNAME}/Container.Selected`];
 
 // Copilot Chat Auth Provider Interface (matches SDK's IChatEmbeddedApiAuthProvider)
 export interface IChatEmbeddedApiAuthProvider {
