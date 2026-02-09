@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => ({
     alias: {
       "@": path.resolve(__dirname, "./src"),
       // Local shim for the SharePoint Embedded Copilot SDK (tgz not installable via npm/bun)
-      "@microsoft/sharepointembedded-copilotchat-react": path.resolve(__dirname, "./src/lib/sharepointembedded-copilotchat-react/index.tsx"),
+    
       // Force all React imports to use the same instance
       "react": path.resolve(__dirname, "./node_modules/react"),
       "react-dom": path.resolve(__dirname, "./node_modules/react-dom"),
@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => ({
     // Force pre-bundling of these to ensure single instance
     include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
     // Exclude the SDK from optimization to let it use our React
-    exclude: ["@microsoft/sharepointembedded-copilotchat-react"],
+    
   },
   build: {
     commonjsOptions: {
