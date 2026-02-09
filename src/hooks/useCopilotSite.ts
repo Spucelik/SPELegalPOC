@@ -48,10 +48,8 @@ export function useCopilotSite(rawContainerId: string | null): CopilotSiteState 
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
       try {
-        // Strip b! prefix if present - Graph API expects raw container GUID
-        const normalizedId = rawContainerId.startsWith('b!') 
-          ? rawContainerId.slice(2) 
-          : rawContainerId;
+        // Keep the container ID as-is - the fileStorage/containers endpoint expects the full ID including b! prefix
+        const normalizedId = rawContainerId;
 
         // Get token with Graph scopes for container access
         const token = await getAccessToken(SCOPES.containerManagement);
