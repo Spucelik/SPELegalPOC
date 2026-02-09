@@ -24,23 +24,22 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
   const [chatKey, setChatKey] = useState(0);
   
-  // The b! prefix is only needed for the ChatEmbedded iframe URL, NOT for Graph API calls
-  const normalizedContainerIdForSdk = useMemo(() => {
+  // Validate and normalize containerId
+  const normalizedContainerId = useMemo(() => {
     if (!containerId || typeof containerId !== 'string') return '';
     return containerId.startsWith('b!') ? containerId : `b!${containerId}`;
   }, [containerId]);
   
-  // Use raw container ID for Graph API calls (useCopilotSite fetches metadata via Graph)
   const {
     isLoading,
     error,
     webUrl: siteUrl,
-    containerName: hookContainerName,
+    containerName: hookSiteName,
     sharePointHostname,
-  } = useCopilotSite(containerId);
+  } = useCopilotSite(normalizedContainerId);
   
   // Use prop name or hook name
-  const siteName = propContainerName || hookContainerName || 'SharePoint Site';
+  const siteName = propContainerName || hookSiteName || 'SharePoint Site';
   
   // Ensure we have valid hostnames with proper normalization
   const rawHostname = sharePointHostname || appConfig.sharePointHostname;
@@ -142,9 +141,9 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
     setChatApi(api);
   }, [handleError]);
 
-  // Early return after all hooks
-  if (!containerId) {
-    console.error('CopilotChatContainer: No containerId provided');
+  // Early return after all hooks are called
+  if (!normalizedContainerId) {
+    console.error('CopilotChatContainer: Invalid containerId provided:', containerId);
     return null;
   }
 
@@ -156,7 +155,7 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
       siteUrl={siteUrl}
       isLoading={isLoading}
       error={error}
-      containerId={normalizedContainerIdForSdk}
+      containerId={normalizedContainerId}
       onError={handleError}
       chatConfig={chatConfig}
       authProvider={authProvider}
