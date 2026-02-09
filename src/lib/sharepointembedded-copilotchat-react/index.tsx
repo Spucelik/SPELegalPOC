@@ -78,11 +78,21 @@ export const ChatEmbedded: React.FC<ChatEmbeddedProps> = ({
     const handleMessage = (event: MessageEvent) => {
       // Only accept messages from our SharePoint hostname
       const hostname = authProvider.hostname.replace(/\/$/, '');
-      if (!event.origin.startsWith(hostname.replace('https://', 'https://'))) {
+      const expectedOrigin = new URL(hostname).origin;
+      if (event.origin !== expectedOrigin) {
         return;
       }
 
-      const data = event.data;
+      // Handle both string (JSON) and object message formats
+      let data = event.data;
+      if (typeof data === 'string') {
+        try {
+          data = JSON.parse(data);
+        } catch {
+          console.log('ChatEmbedded: Ignoring non-JSON string message from iframe');
+          return;
+        }
+      }
       if (!data || typeof data !== 'object') return;
 
       // Handle token requests from the iframe
