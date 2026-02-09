@@ -54,7 +54,7 @@ export function useCopilotSite(rawContainerId: string | null): CopilotSiteState 
           : rawContainerId;
 
         // Get token with Graph scopes for container access
-        const token = await getAccessToken(SCOPES.graph);
+        const token = await getAccessToken(SCOPES.containerManagement);
 
         if (!token) {
           if (!cancelled) {
