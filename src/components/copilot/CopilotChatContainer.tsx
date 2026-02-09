@@ -24,24 +24,25 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   const [chatApi, setChatApi] = useState<ChatEmbeddedAPI | null>(null);
   const [chatKey, setChatKey] = useState(0);
   
-  // Validate and normalize containerId
-  const normalizedContainerId = useMemo(() => {
+  // The b! prefix is only needed for the ChatEmbedded iframe URL, NOT for Graph API calls
+  const normalizedContainerIdForSdk = useMemo(() => {
     if (!containerId || typeof containerId !== 'string') return '';
     return containerId.startsWith('b!') ? containerId : `b!${containerId}`;
   }, [containerId]);
   
+  // Use raw container ID for Graph API calls (useCopilotSite fetches metadata via Graph)
   const {
     isLoading,
     error,
     webUrl: siteUrl,
-    containerName: hookSiteName,
+    containerName: hookContainerName,
     sharePointHostname,
-  } = useCopilotSite(normalizedContainerId);
+  } = useCopilotSite(containerId);
   
   // Use prop name or hook name
-  const siteName = propContainerName || hookSiteName || 'SharePoint Site';
+  const siteName = propContainerName || hookContainerName || 'SharePoint Site';
   
-  // Ensure we have valid hostnames and site names with proper normalization
+  // Ensure we have valid hostnames with proper normalization
   const rawHostname = sharePointHostname || appConfig.sharePointHostname;
   const safeSharePointHostname = appConfig.normalizeSharePointUrl(rawHostname);
   
@@ -55,10 +56,7 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
   const handleError = useCallback((errorMessage: string) => {
     console.error('Copilot chat error:', errorMessage);
     
-    // Add delay to allow auto-recovery mechanism to work first
-    // This prevents showing error notifications when the chat recovers automatically
     setTimeout(() => {
-      // Check if chat has recovered by looking for successful iframe loading
       const chatContainer = document.querySelector('[data-testid="copilot-chat-wrapper"]');
       const hasIframe = chatContainer?.querySelector('iframe');
       
@@ -71,19 +69,16 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
       } else {
         console.log('🔄 Copilot chat recovered automatically, skipping error notification');
       }
-    }, 2000); // 2 second delay to allow auto-recovery
+    }, 2000);
   }, []);
   
-  // Create auth provider for Copilot chat with enhanced URL handling
+  // Create auth provider for Copilot chat
   const authProvider = useMemo((): IChatEmbeddedApiAuthProvider => {
-    // Use the actual container webUrl as the siteUrl for the SDK
     const containerWebUrl = siteUrl || safeSharePointHostname;
     
     console.log('🔧 Creating auth provider with URLs:', {
       hostname: safeSharePointHostname,
       siteUrl: containerWebUrl,
-      originalSiteUrl: siteUrl,
-      fallbackHostname: safeSharePointHostname
     });
 
     const provider: IChatEmbeddedApiAuthProvider = {
@@ -95,9 +90,6 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
             return '';
           }
           
-          console.log('🔑 Getting SharePoint token for hostname:', safeSharePointHostname);
-          
-          // getSharePointToken uses the configured scopes from appConfig
           const token = await getSharePointToken();
           console.log('🔑 SharePoint auth token retrieved:', token ? 'successfully' : 'failed');
           
@@ -115,35 +107,20 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
       }
     };
 
-    // The SDK requires siteUrl to be available on the auth provider
-    // Use the container's actual webUrl to ensure proper site context
+    // The SDK requires siteUrl on the auth provider for proper site context
     (provider as any).siteUrl = containerWebUrl;
-    
-    console.log('🔧 Auth provider created with siteUrl:', (provider as any).siteUrl);
     
     return provider;
   }, [safeSharePointHostname, siteUrl, getSharePointToken, handleError, isAuthenticated]);
   
-  // Create chat configuration following Microsoft documentation
-  const chatConfig = useMemo((): ChatLaunchConfig => {
-    const config: ChatLaunchConfig = {
-      header: `Copilot Chat - ${siteName}`,
-      instruction: "You are a helpful AI assistant. Help users find information, answer questions, and work with their SharePoint files and documents.",
-      locale: "en",
-      suggestedPrompts: ["What are my files?", "Help me find documents", "Show me recent changes"]
-    };
-    
-    console.log('📋 Created chat config:', {
-      header: config.header,
-      hasInstruction: !!config.instruction,
-      locale: config.locale,
-      suggestedPrompts: config.suggestedPrompts
-    });
-    
-    return config;
-  }, [siteName]);
+  // Chat configuration
+  const chatConfig = useMemo((): ChatLaunchConfig => ({
+    header: `Copilot Chat - ${siteName}`,
+    instruction: "You are a helpful AI assistant. Help users find information, answer questions, and work with their SharePoint files and documents.",
+    locale: "en",
+    suggestedPrompts: ["What are my files?", "Help me find documents", "Show me recent changes"]
+  }), [siteName]);
   
-  // Reset chat when there's an issue
   const handleResetChat = useCallback(() => {
     console.log('🔄 Resetting Copilot chat container');
     setChatKey(prev => prev + 1);
@@ -154,7 +131,6 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
     }, 500);
   }, []);
   
-  // Handles API ready event from ChatEmbedded component
   const handleApiReady = useCallback((api: ChatEmbeddedAPI) => {
     if (!api) {
       console.error('❌ Chat API is undefined');
@@ -166,9 +142,9 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
     setChatApi(api);
   }, [handleError]);
 
-  // Early return after all hooks are called
-  if (!normalizedContainerId) {
-    console.error('CopilotChatContainer: Invalid containerId provided:', containerId);
+  // Early return after all hooks
+  if (!containerId) {
+    console.error('CopilotChatContainer: No containerId provided');
     return null;
   }
 
@@ -180,7 +156,7 @@ const CopilotChatContainer: React.FC<CopilotChatContainerProps> = ({
       siteUrl={siteUrl}
       isLoading={isLoading}
       error={error}
-      containerId={normalizedContainerId}
+      containerId={normalizedContainerIdForSdk}
       onError={handleError}
       chatConfig={chatConfig}
       authProvider={authProvider}
