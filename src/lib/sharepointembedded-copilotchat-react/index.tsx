@@ -78,9 +78,16 @@ export const ChatEmbedded: React.FC<ChatEmbeddedProps> = ({
     const handleMessage = (event: MessageEvent) => {
       // Only accept messages from our SharePoint hostname
       const hostname = authProvider.hostname.replace(/\/$/, '');
-      const expectedOrigin = new URL(hostname).origin;
-      if (event.origin !== expectedOrigin) {
-        return;
+      try {
+        const expectedOrigin = new URL(hostname).origin;
+        if (event.origin !== expectedOrigin) {
+          return;
+        }
+      } catch {
+        // Fallback: simple string comparison
+        if (!event.origin.includes(hostname.replace(/^https?:\/\//, ''))) {
+          return;
+        }
       }
 
       // Handle both string (JSON) and object message formats
