@@ -48,10 +48,10 @@ export function useCopilotSite(rawContainerId: string | null): CopilotSiteState 
       setState(prev => ({ ...prev, isLoading: true, error: null }));
 
       try {
-        // Keep the container ID as-is - the fileStorage/containers endpoint expects the full ID including b! prefix
+        // Use the raw container ID as-is (with b! prefix) for the drives endpoint
         const normalizedId = rawContainerId;
 
-        // Get token with Graph scopes for container access
+        // Get token with container management scopes
         const token = await getAccessToken(SCOPES.containerManagement);
 
         if (!token) {
@@ -65,9 +65,10 @@ export function useCopilotSite(rawContainerId: string | null): CopilotSiteState 
           return;
         }
 
-        // Fetch container metadata
-        const response = await fetch(
-          `${ENDPOINTS.graph}/storage/fileStorage/containers/${normalizedId}`,
+        // Use the /drives/{id} endpoint which accepts b!-prefixed IDs
+        // and returns both displayName and webUrl
+        const driveResponse = await fetch(
+          `${ENDPOINTS.graph}/drives/${normalizedId}`,
           {
             headers: {
               Authorization: `Bearer ${token}`,
@@ -76,62 +77,33 @@ export function useCopilotSite(rawContainerId: string | null): CopilotSiteState 
           }
         );
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Container fetch error:', response.status, errorText);
+        if (!driveResponse.ok) {
+          const errorText = await driveResponse.text();
+          console.error('Drive fetch error:', driveResponse.status, errorText);
           if (!cancelled) {
             setState(prev => ({
               ...prev,
               isLoading: false,
-              error: `Container not accessible: ${response.status}`,
+              error: `Container not accessible: ${driveResponse.status}`,
             }));
           }
           return;
         }
 
-        const containerData = await response.json();
-        console.log('📦 Container metadata:', {
-          id: containerData.id,
-          displayName: containerData.displayName,
-          containerTypeId: containerData.containerTypeId,
-          settings: containerData.settings,
-          status: containerData.status,
-          // Log full response for debugging
-          fullResponse: JSON.stringify(containerData, null, 2),
+        const driveData = await driveResponse.json();
+        console.log('📦 Drive metadata:', {
+          id: driveData.id,
+          name: driveData.name,
+          webUrl: driveData.webUrl,
         });
-        
-        // Check if container has the expected structure for Copilot
-        if (!containerData.id) {
-          console.warn('⚠️ Container response missing ID - may indicate configuration issue');
-        }
-
-        // Try to get the drive webUrl
-        let webUrl: string | null = null;
-        try {
-          const driveResponse = await fetch(
-            `${ENDPOINTS.graph}/drives/${normalizedId}`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
-            }
-          );
-
-          if (driveResponse.ok) {
-            const driveData = await driveResponse.json();
-            webUrl = driveData.webUrl || null;
-          }
-        } catch (driveError) {
-          console.warn('Could not fetch drive URL:', driveError);
-        }
 
         if (!cancelled) {
           setState({
             isLoading: false,
             error: null,
             containerId: normalizedId,
-            containerName: containerData.displayName || 'SharePoint Container',
-            webUrl,
+            containerName: driveData.name || driveData.description || 'SharePoint Container',
+            webUrl: driveData.webUrl || null,
             sharePointHostname: APP_CONFIG.sharePointHostname,
           });
         }
