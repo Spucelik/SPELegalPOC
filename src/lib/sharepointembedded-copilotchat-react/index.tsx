@@ -88,11 +88,11 @@ export const ChatEmbedded: React.FC<ChatEmbeddedProps> = ({
       // Handle token requests from the iframe
       if (data.type === 'getToken' || data.messageType === 'getToken') {
         authProvider.getToken().then(token => {
-          iframeRef.current?.contentWindow?.postMessage({
+          iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
             type: 'tokenResponse',
             messageType: 'tokenResponse',
             token,
-          }, hostname);
+          }), hostname);
         }).catch(err => {
           console.error('ChatEmbedded: Failed to get token for iframe:', err);
         });
@@ -103,11 +103,11 @@ export const ChatEmbedded: React.FC<ChatEmbeddedProps> = ({
         console.log('ChatEmbedded: iframe ready');
         // If we have a pending config, send it
         if (chatConfigRef.current) {
-          iframeRef.current?.contentWindow?.postMessage({
+          iframeRef.current?.contentWindow?.postMessage(JSON.stringify({
             type: 'openChat',
             messageType: 'openChat',
             config: chatConfigRef.current,
-          }, hostname);
+          }), hostname);
         }
       }
     };
@@ -147,12 +147,12 @@ export const ChatEmbedded: React.FC<ChatEmbeddedProps> = ({
           const token = await authProvider.getToken();
           
           // Send config and token to iframe
-          iframe.contentWindow?.postMessage({
+          iframe.contentWindow?.postMessage(JSON.stringify({
             type: 'openChat',
             messageType: 'openChat',
             config,
             token,
-          }, hostname);
+          }), hostname);
           
           console.log('ChatEmbedded: openChat config sent to iframe');
         } catch (err) {
