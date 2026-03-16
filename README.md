@@ -1,11 +1,13 @@
 # Welcome to this sample application, focusing on managing legal documents using SharePoint Embedded
 
 ## Getting started
+```sh
 Step 1:  Clone this repo to your local machine
 
 Step 2:  Provide the application and tenant details in the .env.example file.  This is used to prooperly connect to your SharePoint Embedded environment and Foundry IQ if configured.
 
 Step 3:  Rename the .env.example file to simply .env
+```
 
 ## How can I edit this code?
 
