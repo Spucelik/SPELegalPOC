@@ -6,7 +6,7 @@ export const SHAREPOINT_CONFIG = {
   TENANT_ID: "<TENANTID>",
   CONTAINER_TYPE_ID: "<CONTAINERTYPEID>",
   // SharePoint hostname for Copilot API authentication (must include https://)
-  // Use tenant name format: https://{tenant}.sharepoint.com
+  // Use tenant name format: https://<TENANT>.sharepoint.com
   SHAREPOINT_HOSTNAME: "https://<TENANT>.sharepoint.com",
 } as const;
 
