@@ -29,7 +29,7 @@ export const appConfig = {
 // Keep APP_CONFIG as alias for backward compatibility
 export const APP_CONFIG = appConfig;
 
-// MSAL Configuration
+// MSAL Configuration 
 export const MSAL_CONFIG = {
   auth: {
     clientId: APP_CONFIG.clientId,
